@@ -1,0 +1,5 @@
+profiles:
+  dev:
+    - qwen2.5-coder-7b
+  prod:
+    - llama3.1-8b

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InferOps - Control Plane</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="dark-theme">
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo-mark">⚡</div>
+        <div class="brand-text">
+          <h2>InferOps</h2>
+          <span class="version">v0.1.0</span>
+        </div>
+      </div>
+      <nav class="nav-links">
+        <button class="nav-btn active" data-tab="fleet">
+          <span class="icon">🖥️</span> Fleet & Models
+        </button>
+        <button class="nav-btn" data-tab="vram">
+          <span class="icon">🧠</span> VRAM Sizer
+        </button>
+        <button class="nav-btn" data-tab="playground">
+          <span class="icon">💬</span> Chat Playground
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="system-status">
+          <span class="pulse-indicator"></span>
+          <span id="daemonStatusText">Connected</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Top Header -->
+      <header class="topbar">
+        <div class="topbar-title">
+          <h1 id="pageTitle">Inference Fleet</h1>
+          <p id="pageSubtitle">Bare-metal multi-engine control plane for vLLM & SGLang</p>
+        </div>
+        <div class="topbar-actions">
+          <button id="btnRefresh" class="btn btn-secondary">Refresh</button>
+        </div>
+      </header>
+
+      <!-- Tab 1: Fleet & Models -->
+      <section id="tab-fleet" class="tab-pane active">
+        <!-- GPU Topology Section -->
+        <div class="section-block">
+          <h3 class="section-title">GPU Devices & Memory Topology</h3>
+          <div id="gpuCardsContainer" class="gpu-grid">
+            <div class="loading-state">Scanning hardware...</div>
+          </div>
+        </div>
+
+        <!-- Models Catalog Section -->
+        <div class="section-block">
+          <h3 class="section-title">Model Serving Instances</h3>
+          <div id="modelsTableContainer" class="models-container">
+            <div class="loading-state">Loading model catalog...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab 2: VRAM Sizer Pre-flight Check -->
+      <section id="tab-vram" class="tab-pane">
+        <div class="vram-sizer-card">
+          <h3 class="section-title">Predictive VRAM Sizing Pre-flight Calculator</h3>
+          <p class="section-desc">Estimate required GPU memory across weights, KV cache, and activations before launch to prevent CUDA OOM.</p>
+          
+          <div class="sizer-form-grid">
+            <div class="form-group">
+              <label for="sizerModelInput">Model Identifier or HF Path</label>
+              <input type="text" id="sizerModelInput" value="Qwen/Qwen2.5-Coder-7B-Instruct" class="input-field" placeholder="e.g. meta-llama/Llama-3.1-8B-Instruct">
+            </div>
+
+            <div class="form-group">
+              <label for="sizerContextSelect">Context Length (Tokens)</label>
+              <select id="sizerContextSelect" class="input-field">
+                <option value="4096">4,096 (4K)</option>
+                <option value="8192" selected>8,192 (8K Standard)</option>
+                <option value="16384">16,384 (16K)</option>
+                <option value="32768">32,768 (32K Extended)</option>
+                <option value="65536">65,536 (64K)</option>
+                <option value="131072">131,072 (128K Long)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="sizerDtypeSelect">Precision / Quantization</label>
+              <select id="sizerDtypeSelect" class="input-field">
+                <option value="bfloat16">BF16 / FP16 (16-bit unquantized)</option>
+                <option value="fp8">FP8 (8-bit floating point)</option>
+                <option value="awq">AWQ 4-bit (Activation-aware)</option>
+                <option value="gptq">GPTQ 4-bit</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="sizerTpInput">Tensor Parallelism (TP)</label>
+              <select id="sizerTpInput" class="input-field">
+                <option value="1" selected>1 GPU</option>
+                <option value="2">2 GPUs</option>
+                <option value="4">4 GPUs</option>
+                <option value="8">8 GPUs</option>
+              </select>
+            </div>
+          </div>
+
+          <button id="btnCalculateVram" class="btn btn-primary mt-4">Calculate Memory Footprint</button>
+
+          <div id="vramResultBox" class="vram-result-box hidden">
+            <h4>Calculation Results</h4>
+            <div class="vram-breakdown-grid">
+              <div class="metric-card">
+                <span class="metric-label">Model Weights</span>
+                <span id="resWeights" class="metric-val">-- GB</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">KV Cache (16 req)</span>
+                <span id="resKv" class="metric-val">-- GB</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">CUDA Runtime Overhead</span>
+                <span id="resOverhead" class="metric-val">-- GB</span>
+              </div>
+              <div class="metric-card highlight">
+                <span class="metric-label">Required Per GPU</span>
+                <span id="resPerGpu" class="metric-val">-- GB</span>
+              </div>
+            </div>
+            <div id="vramVerdictBanner" class="verdict-banner"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab 3: Chat Playground -->
+      <section id="tab-playground" class="tab-pane">
+        <div class="playground-layout">
+          <div class="playground-chat">
+            <div class="chat-header">
+              <label for="playgroundModelSelect">Target Model:</label>
+              <select id="playgroundModelSelect" class="input-field inline-select">
+                <option value="">Select a running model</option>
+              </select>
+              <div class="telemetry-badge">
+                <span id="chatStats">Tokens: 0 | TTFT: -- | Tok/s: --</span>
+              </div>
+            </div>
+            <div id="chatMessages" class="chat-messages">
+              <div class="message assistant">
+                <div class="msg-bubble">Select a running model and start testing prompts in real-time.</div>
+              </div>
+            </div>
+            <div class="chat-input-bar">
+              <textarea id="chatInput" placeholder="Enter prompt (Shift+Enter for newline)..." rows="2"></textarea>
+              <button id="btnSendMessage" class="btn btn-primary">Send</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

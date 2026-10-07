@@ -1,0 +1,18 @@
+name: llama3.1-8b
+model: meta-llama/Llama-3.1-8B-Instruct
+engine: sglang
+served_model_name: llama3.1-8b
+host: 0.0.0.0
+port: 8002
+gpus:
+- 0
+tensor_parallel_size: 1
+pipeline_parallel_size: 1
+max_model_len: 8192
+gpu_memory_utilization: 0.9
+dtype: auto
+kv_cache_dtype: auto
+env: {}
+extra_args: []
+health_endpoint: /health
+metrics_endpoint: /metrics

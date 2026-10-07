@@ -1,0 +1,18 @@
+name: qwen2.5-coder-7b
+model: Qwen/Qwen2.5-Coder-7B-Instruct
+engine: vllm
+served_model_name: qwen2.5-coder-7b
+host: 0.0.0.0
+port: 8001
+gpus:
+- 0
+tensor_parallel_size: 1
+pipeline_parallel_size: 1
+max_model_len: 8192
+gpu_memory_utilization: 0.9
+dtype: auto
+kv_cache_dtype: auto
+env: {}
+extra_args: []
+health_endpoint: /health
+metrics_endpoint: /metrics
