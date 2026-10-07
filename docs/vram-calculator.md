@@ -1,83 +1,102 @@
 # Predictive VRAM Sizing Engine
 
-InferOps calculates estimated GPU memory requirements prior to launching models. This pre-flight validation prevents out-of-memory errors caused by allocating too much context or running an unquantized model on insufficient hardware.
+InferOps calculates estimated GPU memory requirements prior to launching models. This pre-flight validation prevents out-of-memory errors caused by allocating too much context, high concurrency pools, or running an unquantized model on insufficient hardware.
 
 ## Mathematical Formulation
 
-Total GPU memory required by an inference process is composed of three components:
+Total memory required by an inference process is composed of three primary components:
 
-$$\text{VRAM}_{\text{total}} = \text{VRAM}_{\text{weights}} + \text{VRAM}_{\text{KV-cache}} + \text{VRAM}_{\text{overhead}}$$
+$$\text{Memory}_{\text{total}} = \text{Memory}_{\text{weights}} + \text{Memory}_{\text{KV-cache}} + \text{Memory}_{\text{overhead}}$$
 
-Under Tensor Parallelism degree $TP$, weights and KV cache are split across GPUs:
+Under Tensor Parallelism degree $TP$, weights and KV cache are partitioned across GPUs:
 
 $$\text{VRAM}_{\text{per\_gpu}} = \frac{\text{VRAM}_{\text{weights}} + \text{VRAM}_{\text{KV-cache}}}{TP} + \text{VRAM}_{\text{overhead}}$$
 
 ---
 
-### 1. Weights Memory ($\text{VRAM}_{\text{weights}}$)
+### 1. Weights Memory ($\text{Memory}_{\text{weights}}$)
 
 Given parameter count $N$ (in billions) and precision bytes per parameter $B_p$:
 
-$$\text{VRAM}_{\text{weights}} = \frac{N \times 10^9 \times B_p}{1024^3} \text{ GB}$$
+$$\text{Memory}_{\text{weights}} = \frac{N \times 10^9 \times B_p}{1024^3} \text{ GB}$$
 
 #### Precision Scaling Factors
 
 | Format / Quantization | Bytes per Parameter ($B_p$) | Description |
 | :--- | :--- | :--- |
-| **FP32** | 4.0 | Full precision floating point |
-| **FP16 / BF16** | 2.0 | Standard 16-bit half precision |
-| **FP8 (e4m3 / e5m2)** | 1.05 | 8-bit float with scale factors |
-| **INT8** | 1.10 | 8-bit integer with scales |
-| **AWQ / GPTQ (4-bit)** | 0.55 | 4-bit weights + zero-point scales |
+| **FP32** | 4.00 | Full precision floating point |
+| **FP16 / BF16** | 2.00 | Standard 16-bit half precision |
+| **FP8 (e4m3 / e5m2)** | 1.05 | 8-bit float with block scaling |
+| **INT8** | 1.10 | 8-bit integer with quantization scales |
+| **AWQ / GPTQ (4-bit)** | 0.55 | 4-bit weights + zero-point overhead |
+| **GGUF Q8_0** | 1.08 | 8-bit quantized GGUF format |
+| **GGUF Q5_K_M** | 0.72 | 5-bit medium K-quants |
+| **GGUF Q4_K_M** | 0.58 | 4-bit medium K-quants |
+| **GGUF Q2_K / Q3_K** | 0.35 - 0.45 | Extreme low-bit K-quants |
+
+#### GGUF Partial Layer Offloading (`gpu_layers`)
+
+When using `llama.cpp` with partial GPU offloading (`gpu_layers = N` of total $L$ layers):
+
+$$\text{VRAM}_{\text{weights}} = \text{Memory}_{\text{weights}} \times \min\left(1.0, \frac{\text{gpu\_layers}}{L}\right)$$
+
+The remaining weights remain mapped in Host RAM without consuming VRAM.
+
+#### Mixture-of-Experts (MoE)
+
+For MoE models (e.g. Mixtral 8x7B, Mixtral 8x22B, DeepSeek-V3 671B), all expert weights must reside in memory (GPU or Host RAM), while per-token computation only activates a subset of experts ($K_{\text{active}}$):
+
+$$\text{Total Parameters} = N_{\text{shared}} + E \times N_{\text{expert}}$$
 
 ---
 
-### 2. Key-Value Cache Memory ($\text{VRAM}_{\text{KV-cache}}$)
+### 2. Key-Value Cache Memory ($\text{Memory}_{\text{KV-cache}}$)
 
-Modern transformer architectures employ Grouped-Query Attention (GQA) or Multi-Query Attention (MQA) to reduce memory consumption.
-
-For an architecture with:
-- Number of layers: $L$
-- Number of key-value heads: $H_{kv}$
-- Head dimension: $D_h$
-- Precision bytes per element: $B_{kv}$ (typically 2 for FP16, 1 for FP8)
-- Target sequence context: $C$ tokens
-- Concurrent active requests: $K$
-
-The memory consumption per token is:
+#### Standard GQA / MHA Attention
+For standard Multi-Head Attention (MHA) or Grouped-Query Attention (GQA):
 
 $$\text{Bytes per token} = 2 \times L \times H_{kv} \times D_h \times B_{kv}$$
 
-The total KV cache requirement across $K$ concurrent requests is:
+Where:
+- $L$: Number of layers
+- $H_{kv}$: Number of key-value heads
+- $D_h$: Dimension per attention head
+- $B_{kv}$: Bytes per element (2 for FP16, 1 for FP8 KV cache)
+- $C$: Target context length
+- $K$: Concurrent request capacity
 
-$$\text{VRAM}_{\text{KV-cache}} = \frac{\text{Bytes per token} \times C \times K}{1024^3} \text{ GB}$$
+$$\text{Memory}_{\text{KV-cache}} = \frac{\text{Bytes per token} \times C \times K}{1024^3} \text{ GB}$$
 
-#### Example: Qwen 2.5 7B ($L=28, H_{kv}=4, D_h=128$)
-- Bytes per token in FP16 ($B_{kv}=2$): $2 \times 28 \times 4 \times 128 \times 2 = 57,344 \text{ bytes} \approx 56 \text{ KB}$.
-- Context $C = 8,192$ tokens: $56 \text{ KB} \times 8,192 \approx 458 \text{ MB}$ per sequence.
-- At 16 concurrent requests: $458 \text{ MB} \times 16 \approx 7.16 \text{ GB}$.
+#### DeepSeek MLA (Multi-Head Latent Attention)
+DeepSeek-V3 and DeepSeek-R1 use Multi-Head Latent Attention (MLA), which compresses keys and values into a low-rank latent vector:
+
+$$\text{Latent Dimension} = D_{\text{kv\_lora\_rank}} + D_{\text{qk\_rope\_head\_dim}} = 512 + 64 = 576$$
+
+The KV cache memory per token drops to:
+
+$$\text{Bytes per token}_{\text{MLA}} = L \times 576 \times B_{kv}$$
+
+For DeepSeek-V3 ($L=61$ layers):
+$$\text{Bytes per token} = 61 \times 576 \times 2 = 70,272 \text{ bytes} \approx 68.6 \text{ KB}$$
+Compared to standard MHA which would require $>3.5 \text{ MB}$ per token, MLA reduces KV memory consumption by over **93%**, allowing large concurrent batch sizes on modest VRAM budgets.
 
 ---
 
-### 3. Runtime & CUDA Overhead ($\text{VRAM}_{\text{overhead}}$)
+### 3. Runtime & Overhead
 
-A baseline memory footprint is reserved per GPU process for:
-- CUDA context and kernel binaries (~600 MB - 1 GB).
-- PyTorch CUDA caching allocator fragmentation.
-- CUDA Graph capture workspace (~200 - 400 MB).
-
-InferOps models this baseline overhead as $1.20 \text{ GB}$ per GPU process.
+* **CUDA / ROCm Runtime Overhead**: $1.20 \text{ GB}$ baseline per GPU for CUDA context, PyTorch caching allocator, and CUDA Graph capture.
+* **Apple Silicon / CPU**: $0.20 \text{ GB}$ baseline overhead for unified memory buffers.
 
 ---
 
-## Pre-flight Feasibility Check
+### 4. Pre-flight Feasibility Check
 
-When a target GPU is detected, InferOps compares:
+InferOps compares calculated requirements against available device memory:
 
-$$\text{VRAM}_{\text{per\_gpu}} \le \text{GPU}_{\text{available}} \times 0.95$$
+$$\text{VRAM}_{\text{required}} \le \text{Hardware}_{\text{available}} \times 0.95$$
 
-If required memory exceeds 95% of available capacity, InferOps outputs specific recommendations:
-1. Apply 4-bit AWQ or 8-bit FP8 weight quantization.
-2. Enable 8-bit FP8 KV cache (`kv_cache_dtype: fp8`).
-3. Increase tensor parallelism degree ($TP=2$ or $TP=4$).
-4. Reduce `max_model_len` (e.g. from 32,768 to 8,192).
+If required memory exceeds 95% of available capacity, InferOps outputs recommended mitigation steps:
+1. Apply 4-bit AWQ/GGUF quantization.
+2. Enable FP8 KV cache (`kv_cache_dtype: fp8`).
+3. Scale tensor parallelism ($TP=2$ or $TP=4$) across available GPUs.
+4. Adjust context length or GPU layer offload ratio (`gpu_layers`).

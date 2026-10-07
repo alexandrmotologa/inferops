@@ -170,16 +170,31 @@ inferops key list
 inferops key revoke key_ab4c28f68257
 ```
 
+### `inferops watchdog`
+Run the background crash watchdog daemon to auto-restart crashed inference engines with exponential backoff.
+
+Options:
+* `-i, --interval <SECONDS>`: Health check interval in seconds (default: 5.0).
+* `-r, --max-retries <INT>`: Maximum automated restart attempts per engine (default: 3).
+
+```bash
+inferops watchdog --interval 5.0 --max-retries 3
+```
+
 ---
 
-### `inferops export` (DevOps Manifests)
+### `inferops export` (DevOps & Observability Manifests)
 
-* `inferops export docker-compose [--output <FILE>] [--profile <NAME>]`: Generate a production-ready `docker-compose.yml` with NVIDIA GPU container passthrough.
-* `inferops export k8s <MODEL_NAME> [--output <FILE>] [--namespace <NAME>]`: Generate Kubernetes Deployment and Service YAML manifests with GPU resource limits and probes.
+* `inferops export docker-compose [--output <FILE>] [--profile <NAME>]`: Generate a production-ready `docker-compose.yml` with GPU passthrough.
+* `inferops export k8s <MODEL_NAME> [--output <FILE>] [--namespace <NAME>]`: Generate Kubernetes Deployment and Service YAML manifests.
+* `inferops export grafana [--output <FILE>] [--title <TITLE>]`: Generate a production Grafana 10+ dashboard JSON model with token rate, TTFT percentiles, KV cache usage, and GPU power/thermal gauges.
+* `inferops export prometheus [--output <FILE>] [--gateway-port <PORT>]`: Generate a `prometheus.yml` scrape configuration targeting the InferOps gateway and individual model engines.
 
 ```bash
 inferops export docker-compose --output docker-compose.yml
 inferops export k8s qwen2.5-coder-7b --output k8s-deployment.yaml
+inferops export grafana --output configs/grafana-dashboard.json
+inferops export prometheus --output configs/prometheus.yml
 ```
 
 ---

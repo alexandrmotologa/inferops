@@ -238,11 +238,12 @@ For full CLI documentation, see [docs/cli-reference.md](docs/cli-reference.md).
 
 InferOps separates orchestration into decoupled components:
 
-* `src/inferops/core/`: Pydantic schema validation, environment variable interpolation, VRAM estimator, benchmark runner, and the cross-platform process supervisor.
-* `src/inferops/engines/`: Engine adapters that translate declarative manifests into exact CLI flags for `vLLM` or `SGLang`.
-* `src/inferops/hardware/`: Hardware detection via NVML and metrics aggregation.
-* `src/inferops/gateway/`: Dynamic ASGI reverse proxy with SSE streaming and LiteLLM configuration generator.
-* `src/inferops/web/`: Embedded FastAPI server with WebSocket telemetry and a dark-mode browser dashboard.
+* `src/inferops/core/`: Pydantic schema validation, environment variable interpolation, VRAM estimator, benchmark runner, and the cross-platform process supervisor with automated watchdog recovery.
+* `src/inferops/engines/`: Engine adapters that translate declarative manifests into CLI flags for `vLLM`, `SGLang`, and `llama.cpp`.
+* `src/inferops/hardware/`: Hardware detection across NVIDIA CUDA, AMD ROCm, Apple Silicon unified memory, and host physical RAM.
+* `src/inferops/gateway/`: Dynamic reverse proxy with SSE streaming, workload autoscaling, scale-to-zero, and LiteLLM configuration generator.
+* `src/inferops/export/`: Synthesis generators for Docker Compose, Kubernetes manifests, Grafana 10+ dashboards, and Prometheus scrape configs.
+* `src/inferops/web/`: Embedded FastAPI server with WebSocket telemetry, GGUF/MLA sizing options, and a browser dashboard.
 * `src/inferops/tui/`: Textual terminal application for low-overhead server monitoring.
 
 ---
