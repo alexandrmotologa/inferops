@@ -53,6 +53,14 @@ class VllmEngineAdapter(EngineAdapter):
         if config.kv_cache_dtype and config.kv_cache_dtype != "auto":
             cmd.extend(["--kv-cache-dtype", config.kv_cache_dtype])
 
+        if config.lora_modules:
+            cmd.append("--enable-lora")
+            for mod in config.lora_modules:
+                name = mod.get("name")
+                path = mod.get("path")
+                if name and path:
+                    cmd.extend(["--lora-modules", f"{name}={path}"])
+
         # Extra freeform flags
         cmd.extend(config.extra_args)
 

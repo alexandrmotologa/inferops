@@ -1,0 +1,20 @@
+name: qwen2.5-0.5b-instruct
+model: Qwen/Qwen2.5-0.5B-Instruct
+engine: vllm
+served_model_name: qwen2.5-0.5b-instruct
+host: 0.0.0.0
+port: 8004
+gpus:
+- 0
+tensor_parallel_size: 1
+pipeline_parallel_size: 1
+max_model_len: 32768
+gpu_memory_utilization: 0.9
+dtype: bfloat16
+kv_cache_dtype: auto
+env: {}
+extra_args: []
+health_endpoint: /health
+metrics_endpoint: /metrics
+auto_scale: false
+lora_modules: []

@@ -2,7 +2,7 @@
 
 import re
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -213,3 +213,21 @@ def calculate_vram_requirements(
         available_vram_per_gpu_gb=available_vram_per_gpu_gb,
         suggestion=suggestion,
     )
+
+
+VRAMEstimationResult = VRAMEstimate
+
+
+class VRAMCalculator:
+    """Helper class providing calculation methods on ModelConfig instances."""
+
+    @staticmethod
+    def calculate(config: Any, available_vram_gb: Optional[float] = None) -> VRAMEstimate:
+        return calculate_vram_requirements(
+            model_name_or_path=getattr(config, "model", str(config)),
+            context_length=getattr(config, "max_model_len", 8192) or 8192,
+            dtype=getattr(config, "dtype", "auto"),
+            quantization=getattr(config, "quantization", None),
+            tensor_parallel_size=getattr(config, "tensor_parallel_size", 1),
+            available_vram_per_gpu_gb=available_vram_gb,
+        )

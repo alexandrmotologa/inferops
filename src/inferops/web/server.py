@@ -210,6 +210,88 @@ def create_web_app(workspace_dir: Path) -> FastAPI:
         except Exception:
             pass
 
+    @app.websocket("/ws/logs/{model_name}")
+    async def ws_logs(websocket: WebSocket, model_name: str) -> None:
+        await websocket.accept()
+        log_file = runtime_dir / "logs" / f"{model_name}.log"
+        try:
+            if not log_file.is_file():
+                await websocket.send_text(f"Waiting for log stream for '{model_name}'...\n")
+
+            # Wait for file creation up to 5 seconds
+            waited = 0.0
+            while not log_file.is_file() and waited < 5.0:
+                await asyncio.sleep(0.5)
+                waited += 0.5
+
+            if not log_file.is_file():
+                await websocket.send_text(f"No log file found for '{model_name}'. Start the model to generate logs.\n")
+                await asyncio.sleep(1.0)
+                return
+
+            with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+                # Seek to last 4KB to provide initial context
+                f.seek(0, 2)
+                file_size = f.tell()
+                f.seek(max(0, file_size - 4096), 0)
+                initial_lines = f.readlines()
+                for line in initial_lines[-50:]:
+                    await websocket.send_text(line)
+
+                # Continuous tailing
+                while True:
+                    line = f.readline()
+                    if line:
+                        await websocket.send_text(line)
+                    else:
+                        await asyncio.sleep(0.3)
+        except WebSocketDisconnect:
+            pass
+        except Exception:
+            pass
+
+    @app.get("/api/analytics/usage")
+    async def api_get_usage() -> Dict[str, Any]:
+        from inferops.gateway.accounting import TokenAccountingManager
+        db_path = runtime_dir / "usage.db"
+        mgr = TokenAccountingManager(db_path)
+        return mgr.get_summary_statistics()
+
+    @app.get("/api/keys")
+    async def api_list_keys() -> List[Dict[str, Any]]:
+        from inferops.gateway.accounting import TokenAccountingManager
+        db_path = runtime_dir / "usage.db"
+        mgr = TokenAccountingManager(db_path)
+        keys = mgr.list_api_keys()
+        return [
+            {
+                "key_id": k.key_id,
+                "name": k.name,
+                "rate_limit_rpm": k.rate_limit_rpm,
+                "created_at": k.created_at,
+                "revoked": k.revoked,
+            }
+            for k in keys
+        ]
+
+    class CreateKeyRequest(BaseModel):
+        name: str
+        rate_limit_rpm: int = 60
+
+    @app.post("/api/keys")
+    async def api_create_key(req: CreateKeyRequest) -> Dict[str, Any]:
+        from inferops.gateway.accounting import TokenAccountingManager
+        db_path = runtime_dir / "usage.db"
+        mgr = TokenAccountingManager(db_path)
+        raw_key, info = mgr.create_api_key(req.name, req.rate_limit_rpm)
+        return {
+            "api_key": raw_key,
+            "key_id": info.key_id,
+            "name": info.name,
+            "rate_limit_rpm": info.rate_limit_rpm,
+            "created_at": info.created_at,
+        }
+
     # Mount static assets
     if static_dir.is_dir():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")

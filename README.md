@@ -32,12 +32,16 @@ InferOps manages `vLLM` and `SGLang` processes from declarative YAML manifests, 
 ## Key Capabilities
 
 * **Multi-Engine Support**: Run `vLLM` and `SGLang` side by side with consistent lifecycle commands (`start`, `stop`, `restart`, `status`, `health`, `logs`).
-* **Declarative Configuration**: Define model runtimes in `configs/models/<name>.yaml` and group models into execution profiles (`dev`, `prod`).
+* **HuggingFace Hub Integration**: Pull model architecture directly from HuggingFace to synthesize manifests and run pre-flight VRAM checks (`inferops pull`).
 * **Predictive VRAM Sizing**: Calculates weights, GQA KV cache, and runtime overhead before starting a model to verify that GPU memory is sufficient.
-* **Unified Gateway**: Built-in OpenAI-compatible reverse proxy at `/v1/chat/completions` and `/v1/models` that dynamically routes requests to running instances with server-sent events (SSE) streaming.
-* **Automated Tuning**: Evaluates available GPU topology to suggest optimal tensor parallelism, max model length, and KV cache allocation (`inferops tune`).
-* **Synthetic Benchmarks**: Measures time-to-first-token (TTFT) and token generation throughput with synthetic concurrency tests (`inferops benchmark`).
-* **Dual Dashboards**: Real-time terminal UI with GPU gauges (`inferops tui`) and browser interface (`inferops web`) with an interactive chat playground.
+* **Scale-to-Zero & Cold Starts**: Shuts down idle instances after configured inactivity windows, and automatically spins them up on demand when incoming requests arrive.
+* **Token & Cost Analytics**: SQLite-backed token accounting tracking throughput, average latency, and commercial cost savings compared to closed cloud APIs (`inferops usage`).
+* **API Key Access Control**: Built-in authentication with rate-limiting support (`inferops key create`).
+* **Unified Gateway**: OpenAI-compatible reverse proxy at `/v1/chat/completions` and `/v1/models` that dynamically routes requests with server-sent events (SSE) streaming.
+* **Automated Tuning**: Evaluates GPU memory to calculate optimal tensor parallelism, sequence length, and KV cache allocation (`inferops tune`).
+* **Production DevOps Exporters**: Generates production-ready `docker-compose.yml` with NVIDIA GPU container passthrough and Kubernetes manifests (`inferops export`).
+* **Interconnect Topology Diagnostics**: Inspects PCIe and NVLink connectivity to prevent high-latency bottlenecks during tensor parallel operations (`inferops doctor --deep`).
+* **Dual Dashboards**: Real-time terminal UI with GPU gauges (`inferops tui`) and browser interface (`inferops web`) with an interactive chat playground, Live Console via WebSockets, and cost analytics.
 * **Cross-Platform Supervisor**: Clean process isolation, health checks, log rotation, and graceful shutdown handling across Linux, macOS, WSL2, and Windows.
 
 ---
@@ -184,7 +188,8 @@ inferops tui
 | Command | Description |
 |---|---|
 | `inferops init` | Scaffolds configs, profiles, and runtime directories |
-| `inferops doctor` | Inspects NVIDIA/ROCm GPU environment and engine binaries |
+| `inferops pull <repo>` | Fetches HF metadata, creates manifest, and runs VRAM check |
+| `inferops doctor [--deep]` | Inspects GPU environment, engine binaries, and interconnect topology |
 | `inferops vram <manifest>` | Computes mathematical VRAM requirements |
 | `inferops tune <manifest>` | Generates hardware-optimized engine parameters |
 | `inferops model list` | Lists all discovered model manifests |
@@ -195,8 +200,11 @@ inferops tui
 | `inferops status` | Displays process table, PIDs, ports, and health |
 | `inferops logs <model>` | Streams runtime engine logs |
 | `inferops benchmark <model>`| Profiles throughput and TTFT under synthetic load |
-| `inferops proxy` | Starts the OpenAI-compatible reverse proxy |
-| `inferops web` | Launches the browser dashboard and playground |
+| `inferops proxy [--auth]` | Starts the OpenAI-compatible reverse proxy with scale-to-zero |
+| `inferops usage` | Displays token consumption accounting and commercial savings |
+| `inferops key <create/list>` | Manages cryptographic API keys and rate limits |
+| `inferops export <compose/k8s>` | Generates production Docker Compose and Kubernetes manifests |
+| `inferops web` | Launches browser dashboard, playground, Live Console, and analytics |
 | `inferops tui` | Opens the Textual terminal monitor |
 
 For full CLI documentation, see [docs/cli-reference.md](docs/cli-reference.md).

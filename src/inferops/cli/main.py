@@ -22,11 +22,16 @@ from inferops.core.config import (
     load_profiles,
     save_model_config,
 )
+from inferops.core.hf_hub import pull_and_synthesize
 from inferops.core.supervisor import ModelLifecycleStatus, ProcessSupervisor
 from inferops.core.tuner import tune_model_for_hardware
 from inferops.core.vram_calculator import calculate_vram_requirements
+from inferops.export.docker import generate_docker_compose
+from inferops.export.k8s import generate_kubernetes_manifest
+from inferops.gateway.accounting import TokenAccountingManager
 from inferops.gateway.router import ModelGatewayRouter
 from inferops.hardware.gpu import get_gpu_devices
+from inferops.hardware.topology import inspect_gpu_topology
 from inferops.web.server import create_web_app
 
 # Ensure proper utf-8 output on Windows consoles
@@ -46,6 +51,12 @@ app = typer.Typer(
 )
 model_app = typer.Typer(name="model", help="Manage declarative model specifications")
 app.add_typer(model_app, name="model")
+
+export_app = typer.Typer(name="export", help="Export production deployment manifests")
+app.add_typer(export_app, name="export")
+
+key_app = typer.Typer(name="key", help="Manage API access keys and rate limits")
+app.add_typer(key_app, name="key")
 
 console = Console(safe_box=True)
 
@@ -339,7 +350,9 @@ def vram(
 
 
 @app.command()
-def doctor() -> None:
+def doctor(
+    deep: bool = typer.Option(False, "--deep", help="Run multi-GPU interconnect topology diagnostics"),
+) -> None:
     """Run comprehensive diagnostics for system, CUDA, GPUs, and engine runtimes."""
     console.print("[bold cyan]Running InferOps Environment Diagnostics...[/bold cyan]\n")
 
@@ -360,6 +373,29 @@ def doctor() -> None:
             console.print(f"  * GPU {g.index}: [cyan]{g.name}[/cyan] - {g.free_memory_gb}/{g.total_memory_gb} GB Free ({g.utilization_gpu_pct}% load)")
     else:
         console.print("[yellow]No discrete NVIDIA GPU detected via nvidia-smi / NVML.[/yellow]")
+
+    # 4. Deep Interconnect Topology
+    if deep:
+        console.print("\n[bold cyan]Probing Multi-GPU Interconnect Matrix...[/bold cyan]")
+        topo_report = inspect_gpu_topology()
+        if topo_report.available and topo_report.links:
+            table = Table(title="GPU Interconnect Links", border_style="cyan")
+            table.add_column("Pair", style="bold")
+            table.add_column("Link Code", style="magenta")
+            table.add_column("Description", style="cyan")
+            table.add_column("High-Speed", justify="center")
+
+            for link in topo_report.links:
+                hs_style = "[green]YES[/green]" if link.is_high_speed else "[yellow]NO (Bottleneck)[/yellow]"
+                table.add_row(
+                    f"GPU {link.gpu_a} <-> GPU {link.gpu_b}",
+                    link.link_type,
+                    link.description,
+                    hs_style,
+                )
+            console.print(table)
+        for rec in topo_report.recommendations:
+            console.print(f"[cyan]Recommendation:[/cyan] {rec}")
 
     console.print("\n[bold green][OK] Diagnostic check completed.[/bold green]")
 
@@ -397,8 +433,9 @@ def tui() -> None:
 def proxy(
     port: int = typer.Option(8000, "--port", "-p", help="Port for the unified OpenAI API gateway"),
     host: str = typer.Option("0.0.0.0", "--host", "-h", help="Host address"),
+    auth: bool = typer.Option(False, "--auth", help="Enforce API key authentication"),
 ) -> None:
-    """Start the dynamic OpenAI-compatible gateway reverse proxy."""
+    """Start the dynamic OpenAI-compatible gateway reverse proxy with scale-to-zero and token accounting."""
     ws = get_workspace()
     models_dir = ws / "configs" / "models"
     catalog = discover_models(models_dir)
@@ -413,7 +450,13 @@ def proxy(
         return active
 
     active_ports = asyncio.run(get_active())
-    router = ModelGatewayRouter(catalog, active_ports)
+    router = ModelGatewayRouter(
+        catalog=catalog,
+        active_ports=active_ports,
+        db_path=ws / "runtime" / "usage.db",
+        supervisor=supervisor,
+        require_api_keys=auth,
+    )
     fastapi_proxy = router.create_fastapi_app()
 
     console.print(
@@ -627,6 +670,209 @@ def model_create(
     target_path = models_dir / f"{cfg.name}.yaml"
     save_model_config(cfg, target_path)
     console.print(f"[bold green][OK] Model configuration saved to {target_path}[/bold green]")
+
+
+@app.command("pull")
+def pull_model(
+    repo_id: str = typer.Argument(..., help="Hugging Face model ID (e.g. meta-llama/Llama-3.1-8B-Instruct)"),
+    port: int = typer.Option(8001, "--port", "-p", help="Port number for this model instance"),
+    engine: str = typer.Option("vllm", "--engine", "-e", help="Inference engine: vllm or sglang"),
+    token: Optional[str] = typer.Option(None, "--token", "-t", help="Optional Hugging Face access token"),
+    download: bool = typer.Option(False, "--download", "-d", help="Download model weights via huggingface-cli"),
+) -> None:
+    """Fetch model architecture from HuggingFace, synthesize YAML manifest, and run VRAM check."""
+    ws = get_workspace()
+    models_dir = ws / "configs" / "models"
+    eng = EngineType.VLLM if engine.lower() == "vllm" else EngineType.SGLANG
+
+    console.print(f"[bold cyan]Fetching HuggingFace metadata for '{repo_id}'...[/bold cyan]")
+    try:
+        cfg, manifest_path, vram_result = pull_and_synthesize(
+            repo_id=repo_id,
+            output_dir=models_dir,
+            token=token,
+            engine=eng,
+            port=port,
+        )
+        console.print(f"[bold green][OK] Configuration synthesized and saved to {manifest_path}[/bold green]")
+
+        table = Table(title=f"Predictive VRAM Analysis: {cfg.name}", border_style="cyan")
+        table.add_column("Component", style="bold")
+        table.add_column("Memory (GB)", justify="right")
+        table.add_row("Model Weights", f"{vram_result.weights_vram_gb:.2f} GB")
+        table.add_row("KV Cache", f"{vram_result.kv_cache_vram_gb:.2f} GB")
+        table.add_row("CUDA Overhead", f"{vram_result.cuda_overhead_gb:.2f} GB")
+        table.add_row("[bold]Required Per GPU[/bold]", f"[bold]{vram_result.vram_per_gpu_gb:.2f} GB[/bold]")
+        console.print(table)
+
+        verdict_style = "bold green" if vram_result.fits else "bold red"
+        console.print(Panel(f"[{verdict_style}]{vram_result.suggestion}[/{verdict_style}]", title="VRAM Sizer Verdict"))
+
+        if download:
+            hf_cli = shutil.which("huggingface-cli")
+            if not hf_cli:
+                console.print("[yellow]huggingface-cli not found on PATH. Install huggingface_hub to download weights.[/yellow]")
+            else:
+                import subprocess
+                console.print("[bold cyan]Downloading model weights using huggingface-cli...[/bold cyan]")
+                cmd = [hf_cli, "download", repo_id]
+                if token:
+                    cmd.extend(["--token", token])
+                subprocess.run(cmd, check=True)
+                console.print("[bold green][OK] Weights download complete.[/bold green]")
+
+    except Exception as e:
+        console.print(f"[bold red]Failed to pull model: {e}[/bold red]")
+        raise typer.Exit(1)
+
+
+@app.command("usage")
+def usage_stats() -> None:
+    """Display token consumption accounting and commercial cost savings."""
+    ws = get_workspace()
+    db_path = ws / "runtime" / "usage.db"
+    accounting = TokenAccountingManager(db_path)
+    summary = accounting.get_summary_statistics()
+
+    table = Table(title="InferOps Token Accounting & Cost Savings", border_style="cyan")
+    table.add_column("Metric", style="bold")
+    table.add_column("Value", justify="right", style="cyan")
+
+    table.add_row("Total Invocations", f"{summary['total_requests']:,}")
+    table.add_row("Prompt Tokens", f"{summary['total_prompt_tokens']:,}")
+    table.add_row("Completion Tokens", f"{summary['total_completion_tokens']:,}")
+    table.add_row("Grand Total Tokens", f"{summary['grand_total_tokens']:,}")
+    table.add_row("Average Latency", f"{summary['avg_latency_ms']:.1f} ms")
+    table.add_row("[bold green]Commercial Cost Saved[/bold green]", f"[bold green]${summary['total_savings_usd']:.4f}[/bold green]")
+    console.print(table)
+
+    if summary["by_model"]:
+        m_table = Table(title="Usage Breakdown by Model", border_style="magenta")
+        m_table.add_column("Model Identifier", style="bold")
+        m_table.add_column("Requests", justify="right")
+        m_table.add_column("Tokens", justify="right")
+        m_table.add_column("Commercial Savings", justify="right", style="green")
+
+        for m in summary["by_model"]:
+            m_table.add_row(m["model"], f"{m['requests']:,}", f"{m['tokens']:,}", f"${m['savings']:.4f}")
+        console.print(m_table)
+
+
+@key_app.command("create")
+def key_create(
+    name: str = typer.Argument(..., help="Name or service identity for this API key"),
+    rpm: int = typer.Option(60, "--rpm", help="Rate limit requests per minute"),
+) -> None:
+    """Generate a new secure API key with rate limits."""
+    ws = get_workspace()
+    accounting = TokenAccountingManager(ws / "runtime" / "usage.db")
+    raw_key, info = accounting.create_api_key(name, rate_limit_rpm=rpm)
+
+    console.print(
+        Panel.fit(
+            f"[bold green]API Key Generated Successfully![/bold green]\n\n"
+            f"Key Token: [bold cyan]{raw_key}[/bold cyan]\n"
+            f"Key ID:    {info.key_id}\n"
+            f"Identity:  {info.name}\n"
+            f"Rate Limit:{info.rate_limit_rpm} req/min\n\n"
+            f"[yellow]Store this token securely; it will not be displayed again.[/yellow]",
+            title="Access Key Created",
+        )
+    )
+
+
+@key_app.command("list")
+def key_list() -> None:
+    """List all registered API keys."""
+    ws = get_workspace()
+    accounting = TokenAccountingManager(ws / "runtime" / "usage.db")
+    keys = accounting.list_api_keys()
+
+    if not keys:
+        console.print("[yellow]No API keys generated yet. Run [bold]inferops key create <name>[/bold].[/yellow]")
+        return
+
+    table = Table(title="Registered API Keys", border_style="cyan")
+    table.add_column("Key ID", style="bold")
+    table.add_column("Name / Identity", style="cyan")
+    table.add_column("RPM Limit", justify="right")
+    table.add_column("Status", justify="center")
+
+    for k in keys:
+        status_str = "[red]REVOKED[/red]" if k.revoked else "[green]ACTIVE[/green]"
+        table.add_row(k.key_id, k.name, str(k.rate_limit_rpm), status_str)
+    console.print(table)
+
+
+@key_app.command("revoke")
+def key_revoke(
+    key_id: str = typer.Argument(..., help="Key ID to revoke (e.g. key_...)"),
+) -> None:
+    """Revoke an active API key."""
+    ws = get_workspace()
+    accounting = TokenAccountingManager(ws / "runtime" / "usage.db")
+    revoked = accounting.revoke_api_key(key_id)
+    if revoked:
+        console.print(f"[bold green][OK] API key '{key_id}' has been revoked.[/bold green]")
+    else:
+        console.print(f"[bold red]Key ID '{key_id}' not found.[/bold red]")
+
+
+@export_app.command("docker-compose")
+def export_docker(
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="File to write docker-compose.yml to"),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Filter models by profile"),
+) -> None:
+    """Generate production-ready docker-compose.yml with NVIDIA GPU container passthrough."""
+    ws = get_workspace()
+    models_dir = ws / "configs" / "models"
+    catalog = discover_models(models_dir)
+
+    models_to_export = []
+    if profile:
+        profiles = load_profiles(ws / "configs" / "profiles.yaml")
+        if profile not in profiles:
+            console.print(f"[bold red]Profile '{profile}' not found.[/bold red]")
+            raise typer.Exit(1)
+        for name in profiles[profile]:
+            if name in catalog:
+                models_to_export.append(catalog[name])
+    else:
+        models_to_export = list(catalog.values())
+
+    if not models_to_export:
+        console.print("[yellow]No models found to export.[/yellow]")
+        return
+
+    compose_yaml = generate_docker_compose(models_to_export)
+    if output:
+        output.write_text(compose_yaml, encoding="utf-8")
+        console.print(f"[bold green][OK] Docker compose written to {output}[/bold green]")
+    else:
+        console.print(compose_yaml)
+
+
+@export_app.command("k8s")
+def export_k8s(
+    model_name: str = typer.Argument(..., help="Name of model from catalog to export manifests for"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="File to write manifests to"),
+    namespace: str = typer.Option("inferops", "--namespace", "-n", help="Target Kubernetes namespace"),
+) -> None:
+    """Generate production Kubernetes Deployment & Service YAML manifests with GPU limits."""
+    ws = get_workspace()
+    models_dir = ws / "configs" / "models"
+    catalog = discover_models(models_dir)
+
+    if model_name not in catalog:
+        console.print(f"[bold red]Model '{model_name}' not found in catalog.[/bold red]")
+        raise typer.Exit(1)
+
+    k8s_yaml = generate_kubernetes_manifest(catalog[model_name], namespace=namespace)
+    if output:
+        output.write_text(k8s_yaml, encoding="utf-8")
+        console.print(f"[bold green][OK] Kubernetes manifests written to {output}[/bold green]")
+    else:
+        console.print(k8s_yaml)
 
 
 if __name__ == "__main__":

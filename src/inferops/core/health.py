@@ -47,3 +47,32 @@ async def wait_for_health(
         await asyncio.sleep(poll_interval)
 
     return False
+
+
+class HealthChecker:
+    """Helper class for polling HTTP health endpoints synchronously and asynchronously."""
+
+    def __init__(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 8000,
+        endpoint: str = "/health",
+        timeout: float = 1.5,
+    ) -> None:
+        self.host = "127.0.0.1" if host in ("0.0.0.0", "") else host
+        self.port = port
+        self.endpoint = endpoint
+        self.timeout = timeout
+
+    def check(self) -> bool:
+        url = f"http://{self.host}:{self.port}{self.endpoint}"
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                resp = client.get(url)
+                return resp.status_code == 200
+        except Exception:
+            return False
+
+    async def check_async(self) -> bool:
+        return await check_http_health(self.host, self.port, self.endpoint, timeout=self.timeout)
+

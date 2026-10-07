@@ -17,7 +17,7 @@
         <div class="logo-mark">⚡</div>
         <div class="brand-text">
           <h2>InferOps</h2>
-          <span class="version">v0.1.0</span>
+          <span class="version">v0.2.0</span>
         </div>
       </div>
       <nav class="nav-links">
@@ -29,6 +29,12 @@
         </button>
         <button class="nav-btn" data-tab="playground">
           <span class="icon">💬</span> Chat Playground
+        </button>
+        <button class="nav-btn" data-tab="logs">
+          <span class="icon">📜</span> Live Console
+        </button>
+        <button class="nav-btn" data-tab="analytics">
+          <span class="icon">📊</span> Cost & Analytics
         </button>
       </nav>
       <div class="sidebar-footer">
@@ -165,6 +171,61 @@
               <textarea id="chatInput" placeholder="Enter prompt (Shift+Enter for newline)..." rows="2"></textarea>
               <button id="btnSendMessage" class="btn btn-primary">Send</button>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab 4: Live Console / WebSocket Logs -->
+      <section id="tab-logs" class="tab-pane">
+        <div class="terminal-card">
+          <div class="terminal-header">
+            <div class="terminal-controls">
+              <label for="logModelSelect">Stream Process Logs:</label>
+              <select id="logModelSelect" class="input-field inline-select">
+                <option value="">Select model</option>
+              </select>
+              <span id="logConnectionStatus" class="status-chip">Idle</span>
+            </div>
+            <div class="terminal-actions">
+              <label class="checkbox-label">
+                <input type="checkbox" id="chkAutoScroll" checked> Auto-scroll
+              </label>
+              <button id="btnClearLogs" class="btn btn-secondary btn-sm">Clear</button>
+            </div>
+          </div>
+          <pre id="terminalOutput" class="terminal-window">InferOps Web Console ready. Select a model to stream live engine output.</pre>
+        </div>
+      </section>
+
+      <!-- Tab 5: Token & Cost Analytics -->
+      <section id="tab-analytics" class="tab-pane">
+        <div class="section-block">
+          <h3 class="section-title">Token Accounting & Commercial Cost Savings</h3>
+          <p class="section-desc">Calculated against closed API benchmarks (GPT-4o standard: $2.50/M input, $10.00/M output).</p>
+          <div class="analytics-grid">
+            <div class="stat-card">
+              <span class="stat-label">Estimated Cost Saved</span>
+              <span id="statCostSaved" class="stat-number text-success">$0.0000</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Total Tokens Served</span>
+              <span id="statTotalTokens" class="stat-number">0</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Total API Invocations</span>
+              <span id="statTotalRequests" class="stat-number">0</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Average Latency</span>
+              <span id="statAvgLatency" class="stat-number">-- ms</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-block mt-6">
+          <h3 class="section-title">Usage by Model</h3>
+          <div id="analyticsTableContainer" class="models-container">
+            <div class="loading-state">Loading usage records...</div>
           </div>
         </div>
       </section>

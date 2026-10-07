@@ -73,6 +73,18 @@ class ModelConfig(BaseModel):
     )
     health_endpoint: str = Field(default="/health", description="HTTP healthcheck endpoint")
     metrics_endpoint: str = Field(default="/metrics", description="Prometheus metrics endpoint")
+    idle_timeout_seconds: Optional[int] = Field(
+        default=None,
+        description="Inactivity window in seconds before model is automatically scaled to zero",
+    )
+    auto_scale: bool = Field(
+        default=False,
+        description="Whether to wake up model on demand when incoming requests arrive",
+    )
+    lora_modules: List[Dict[str, str]] = Field(
+        default_factory=list,
+        description="List of LoRA modules as [{'name': 'alias', 'path': '/path/or/repo'}]",
+    )
 
     @field_validator("name")
     @classmethod

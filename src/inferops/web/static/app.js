@@ -1,14 +1,19 @@
 // InferOps Web Dashboard JavaScript Application
 
+let logWebSocket = null;
+
 document.addEventListener("DOMContentLoaded", () => {
   setupTabs();
   loadFleetData();
   setupVramCalculator();
   setupChatPlayground();
+  setupLiveConsole();
+  setupAnalytics();
   connectWebSocket();
 
   document.getElementById("btnRefresh")?.addEventListener("click", () => {
     loadFleetData();
+    loadAnalyticsData();
   });
 });
 
@@ -31,10 +36,16 @@ function setupTabs() {
         fleet: ["Inference Fleet", "Bare-metal multi-engine control plane for vLLM & SGLang"],
         vram: ["VRAM Sizer", "Analytical pre-flight memory calculator"],
         playground: ["Chat Playground", "Interactive test workbench with live token telemetry"],
+        logs: ["Live Console", "Real-time streaming process log monitor"],
+        analytics: ["Cost & Analytics", "Token consumption accounting & commercial cost savings"],
       };
       if (titles[targetTab]) {
         document.getElementById("pageTitle").textContent = titles[targetTab][0];
         document.getElementById("pageSubtitle").textContent = titles[targetTab][1];
+      }
+
+      if (targetTab === "analytics") {
+        loadAnalyticsData();
       }
     });
   });
@@ -55,6 +66,7 @@ async function loadFleetData() {
       const models = await modelsRes.json();
       renderModelsTable(models);
       updatePlaygroundModelsDropdown(models);
+      updateLogModelsDropdown(models);
     }
   } catch (err) {
     console.error("Failed to load fleet data:", err);
@@ -105,182 +117,223 @@ function renderModelsTable(models) {
   if (!container) return;
 
   if (!models || models.length === 0) {
-    container.innerHTML = `<div class="loading-state">No model definitions found in configs/models/. Run <code>inferops model create</code> to register one.</div>`;
+    container.innerHTML = `
+      <div style="padding: 24px; text-align: center; color: var(--text-muted);">
+        No model configs found in configs/models/*.yaml. Run <code>inferops init</code> or <code>inferops model create</code>.
+      </div>`;
     return;
   }
 
-  container.innerHTML = models
+  const rows = models
     .map((m) => {
-      const isHealthy = m.status === "HEALTHY";
+      const isHealthy = m.status === "healthy";
+      const isStarting = m.status === "starting";
+      const badgeClass = isHealthy ? "badge-healthy" : isStarting ? "badge-starting" : "badge-stopped";
+
       return `
-      <div class="model-row-card">
-        <div class="model-info-block">
-          <h4>${m.name}</h4>
-          <div class="model-tags">
-            <span class="tag-badge">Engine: ${m.engine.toUpperCase()}</span>
-            <span class="tag-badge">Port: ${m.port}</span>
-            <span class="tag-badge">GPUs: ${m.gpus || "0"}</span>
-            <span class="tag-badge">${m.model}</span>
-          </div>
-        </div>
-        <div style="display: flex; align-items: center; gap: 16px;">
-          <span class="status-badge status-${m.status}">${m.status}</span>
-          <div class="model-actions">
-            ${
-              isHealthy
-                ? `<button class="btn btn-secondary" onclick="stopModel('${m.name}')">Stop</button>`
-                : `<button class="btn btn-primary" onclick="startModel('${m.name}')">Start</button>`
-            }
-          </div>
-        </div>
-      </div>`;
+      <tr>
+        <td><strong>${m.name}</strong><br><small style="color:var(--text-muted);">${m.model}</small></td>
+        <td><span class="engine-tag">${m.engine.toUpperCase()}</span></td>
+        <td>:${m.port}</td>
+        <td>${m.gpus || "0"}</td>
+        <td><span class="status-badge ${badgeClass}">${m.status.toUpperCase()}</span></td>
+        <td>
+          ${
+            isHealthy || isStarting
+              ? `<button class="btn btn-secondary btn-sm" onclick="stopModel('${m.name}')">Stop</button>`
+              : `<button class="btn btn-primary btn-sm" onclick="startModel('${m.name}')">Start</button>`
+          }
+        </td>
+      </tr>`;
     })
     .join("");
+
+  container.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Model</th>
+          <th>Engine</th>
+          <th>Port</th>
+          <th>GPUs</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>`;
 }
 
-async function startModel(name) {
+function updatePlaygroundModelsDropdown(models) {
+  const select = document.getElementById("playgroundModelSelect");
+  if (!select) return;
+
+  const currentVal = select.value;
+  select.innerHTML = '<option value="">Select a model</option>';
+
+  models.forEach((m) => {
+    const opt = document.createElement("option");
+    opt.value = m.name;
+    opt.textContent = `${m.name} (${m.engine} - ${m.status})`;
+    select.appendChild(opt);
+  });
+
+  if (currentVal) select.value = currentVal;
+}
+
+function updateLogModelsDropdown(models) {
+  const select = document.getElementById("logModelSelect");
+  if (!select) return;
+
+  const currentVal = select.value;
+  select.innerHTML = '<option value="">Select model to tail</option>';
+
+  models.forEach((m) => {
+    const opt = document.createElement("option");
+    opt.value = m.name;
+    opt.textContent = `${m.name} (${m.status})`;
+    select.appendChild(opt);
+  });
+
+  if (currentVal) select.value = currentVal;
+}
+
+window.startModel = async function (name) {
   try {
     const res = await fetch(`/api/models/${name}/start`, { method: "POST" });
     if (res.ok) {
-      loadFleetData();
+      setTimeout(loadFleetData, 1000);
     } else {
       const err = await res.json();
-      alert("Failed to start model: " + (err.detail || res.statusText));
+      alert("Failed to start model: " + (err.detail || "Unknown error"));
     }
   } catch (e) {
-    alert("Error: " + e.message);
+    alert("Network error: " + e.message);
   }
-}
+};
 
-async function stopModel(name) {
+window.stopModel = async function (name) {
   try {
     const res = await fetch(`/api/models/${name}/stop`, { method: "POST" });
     if (res.ok) {
-      loadFleetData();
+      setTimeout(loadFleetData, 1000);
     }
   } catch (e) {
-    alert("Error: " + e.message);
+    alert("Network error: " + e.message);
   }
-}
+};
 
 function setupVramCalculator() {
   const btn = document.getElementById("btnCalculateVram");
-  btn?.addEventListener("click", async () => {
+  if (!btn) return;
+
+  btn.addEventListener("click", async () => {
     const model = document.getElementById("sizerModelInput").value.trim();
-    const context = parseInt(document.getElementById("sizerContextSelect").value, 10);
+    const ctx = parseInt(document.getElementById("sizerContextSelect").value, 10);
     const dtype = document.getElementById("sizerDtypeSelect").value;
     const tp = parseInt(document.getElementById("sizerTpInput").value, 10);
 
-    const quant = dtype === "awq" || dtype === "gptq" ? dtype : null;
+    const quant = ["awq", "gptq", "fp8"].includes(dtype) ? dtype : null;
+    const actualDtype = quant ? "auto" : dtype;
+
+    btn.disabled = true;
+    btn.textContent = "Calculating...";
 
     try {
       const res = await fetch("/api/vram/estimate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: jsonBody({
+        body: JSON.stringify({
           model: model,
-          context_length: context,
-          dtype: dtype,
+          context_length: ctx,
+          dtype: actualDtype,
           quantization: quant,
           tensor_parallel_size: tp,
         }),
       });
 
-      if (!res.ok) throw new Error("Calculation failed");
-      const data = await res.json();
+      if (res.ok) {
+        const data = await res.json();
+        document.getElementById("resWeights").textContent = `${data.weights_gb} GB`;
+        document.getElementById("resKv").textContent = `${data.kv_cache_gb} GB`;
+        document.getElementById("resOverhead").textContent = `${data.cuda_overhead_gb} GB`;
+        document.getElementById("resPerGpu").textContent = `${data.per_gpu_gb} GB`;
 
-      document.getElementById("resWeights").textContent = `${data.weights_gb} GB`;
-      document.getElementById("resKv").textContent = `${data.kv_cache_gb} GB`;
-      document.getElementById("resOverhead").textContent = `${data.cuda_overhead_gb} GB`;
-      document.getElementById("resPerGpu").textContent = `${data.per_gpu_gb} GB`;
+        const banner = document.getElementById("vramVerdictBanner");
+        banner.className = data.fits ? "verdict-banner pass" : "verdict-banner fail";
+        banner.innerHTML = `<strong>${data.fits ? "[PASS] Model Fits Memory" : "[WARNING] Out of Memory Risk"}</strong><br>${data.suggestion}`;
 
-      const banner = document.getElementById("vramVerdictBanner");
-      banner.className = `verdict-banner ${data.fits ? "fits" : "overflow"}`;
-      banner.textContent = data.suggestion || (data.fits ? "Model will fit in target GPU memory." : "Insufficient GPU memory.");
-
-      document.getElementById("vramResultBox").classList.remove("hidden");
+        document.getElementById("vramResultBox").classList.remove("hidden");
+      }
     } catch (e) {
-      alert("Failed to estimate VRAM: " + e.message);
+      alert("Error: " + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Calculate Memory Footprint";
     }
   });
-}
-
-function updatePlaygroundModelsDropdown(models) {
-  const sel = document.getElementById("playgroundModelSelect");
-  if (!sel) return;
-  const currentVal = sel.value;
-  sel.innerHTML = '<option value="">Select a running model</option>';
-
-  const running = models.filter((m) => m.status === "HEALTHY");
-  running.forEach((m) => {
-    const opt = document.createElement("option");
-    opt.value = m.name;
-    opt.textContent = `${m.name} (${m.engine.toUpperCase()} - Port ${m.port})`;
-    sel.appendChild(opt);
-  });
-
-  if (currentVal && running.some((m) => m.name === currentVal)) {
-    sel.value = currentVal;
-  }
 }
 
 function setupChatPlayground() {
   const sendBtn = document.getElementById("btnSendMessage");
   const chatInput = document.getElementById("chatInput");
+  const modelSelect = document.getElementById("playgroundModelSelect");
+  const messagesContainer = document.getElementById("chatMessages");
 
   const send = async () => {
-    const prompt = chatInput.value.trim();
-    const model = document.getElementById("playgroundModelSelect").value;
-    if (!prompt) return;
+    const text = chatInput.value.trim();
+    const model = modelSelect.value;
+    if (!text) return;
     if (!model) {
-      alert("Please select a running model from the dropdown first.");
+      alert("Please select a running model first.");
       return;
     }
 
-    appendChatMessage("user", prompt);
+    appendChatMessage("user", text);
     chatInput.value = "";
 
-    const assistantMsgNode = appendChatMessage("assistant", "");
-    const bubble = assistantMsgNode.querySelector(".msg-bubble");
-    bubble.textContent = "...";
+    const assistantMsg = appendChatMessage("assistant", "...");
+    const bubble = assistantMsg.querySelector(".msg-bubble");
+    bubble.textContent = "";
 
     const startTime = performance.now();
     let firstTokenTime = null;
     let tokenCount = 0;
 
     try {
-      const resp = await fetch("/api/chat", {
+      const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: jsonBody({
+        body: JSON.stringify({
           model: model,
-          messages: [{ role: "user", content: prompt }],
+          messages: [{ role: "user", content: text }],
           stream: true,
         }),
       });
 
-      if (!resp.ok) {
-        bubble.textContent = "Error: " + resp.statusText;
+      if (!res.ok) {
+        const err = await res.json();
+        bubble.textContent = "Error: " + (err.detail || res.statusText);
         return;
       }
 
-      bubble.textContent = "";
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n");
 
         for (const line of lines) {
           if (line.startsWith("data: ")) {
             const dataStr = line.slice(6).trim();
             if (dataStr === "[DONE]") continue;
+
             try {
               const parsed = JSON.parse(dataStr);
               const delta = parsed.choices?.[0]?.delta?.content || "";
@@ -290,12 +343,12 @@ function setupChatPlayground() {
                 }
                 tokenCount++;
                 bubble.textContent += delta;
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
               }
-            } catch (err) {}
+            } catch (e) {}
           }
         }
 
-        // Update live stats
         const elapsedSec = (performance.now() - startTime) / 1000;
         const tokPerSec = elapsedSec > 0 ? (tokenCount / elapsedSec).toFixed(1) : "--";
         const ttftStr = firstTokenTime !== null ? `${Math.round(firstTokenTime)}ms` : "--";
@@ -315,6 +368,124 @@ function setupChatPlayground() {
   });
 }
 
+function setupLiveConsole() {
+  const modelSelect = document.getElementById("logModelSelect");
+  const terminal = document.getElementById("terminalOutput");
+  const statusChip = document.getElementById("logConnectionStatus");
+  const autoScrollChk = document.getElementById("chkAutoScroll");
+  const clearBtn = document.getElementById("btnClearLogs");
+
+  clearBtn?.addEventListener("click", () => {
+    terminal.textContent = "";
+  });
+
+  modelSelect?.addEventListener("change", () => {
+    const model = modelSelect.value;
+    if (!model) {
+      if (logWebSocket) {
+        logWebSocket.close();
+        logWebSocket = null;
+      }
+      statusChip.textContent = "Idle";
+      statusChip.className = "status-chip";
+      return;
+    }
+
+    if (logWebSocket) {
+      logWebSocket.close();
+      logWebSocket = null;
+    }
+
+    terminal.textContent = `[inferops] Connecting to live log stream for '${model}'...\n`;
+    statusChip.textContent = "Connecting";
+    statusChip.className = "status-chip";
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/ws/logs/${model}`;
+
+    logWebSocket = new WebSocket(wsUrl);
+
+    logWebSocket.onopen = () => {
+      statusChip.textContent = "Streaming";
+      statusChip.className = "status-chip active";
+    };
+
+    logWebSocket.onmessage = (event) => {
+      terminal.textContent += event.data;
+      if (autoScrollChk.checked) {
+        terminal.scrollTop = terminal.scrollHeight;
+      }
+    };
+
+    logWebSocket.onclose = () => {
+      statusChip.textContent = "Closed";
+      statusChip.className = "status-chip";
+    };
+
+    logWebSocket.onerror = () => {
+      statusChip.textContent = "Error";
+      statusChip.className = "status-chip";
+    };
+  });
+}
+
+function setupAnalytics() {
+  loadAnalyticsData();
+}
+
+async function loadAnalyticsData() {
+  try {
+    const res = await fetch("/api/analytics/usage");
+    if (!res.ok) return;
+
+    const data = await res.json();
+    document.getElementById("statCostSaved").textContent = `$${data.total_savings_usd.toFixed(4)}`;
+    document.getElementById("statTotalTokens").textContent = data.grand_total_tokens.toLocaleString();
+    document.getElementById("statTotalRequests").textContent = data.total_requests.toLocaleString();
+    document.getElementById("statAvgLatency").textContent = `${data.avg_latency_ms.toFixed(1)} ms`;
+
+    const container = document.getElementById("analyticsTableContainer");
+    if (!container) return;
+
+    if (!data.by_model || data.by_model.length === 0) {
+      container.innerHTML = `
+        <div style="padding: 24px; text-align: center; color: var(--text-muted);">
+          No inference requests recorded yet. Query models through the OpenAI gateway to accumulate token savings data.
+        </div>`;
+      return;
+    }
+
+    const rows = data.by_model
+      .map(
+        (m) => `
+        <tr>
+          <td><strong>${m.model}</strong></td>
+          <td>${m.requests.toLocaleString()}</td>
+          <td>${m.tokens.toLocaleString()}</td>
+          <td class="text-success">$${m.savings.toFixed(4)}</td>
+        </tr>`
+      )
+      .join("");
+
+    container.innerHTML = `
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Model Identifier</th>
+            <th>Requests</th>
+            <th>Total Tokens</th>
+            <th>Commercial Cost Saved</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>`;
+  } catch (e) {
+    console.error("Failed to load analytics:", e);
+  }
+}
+
 function appendChatMessage(role, text) {
   const container = document.getElementById("chatMessages");
   const msg = document.createElement("div");
@@ -327,10 +498,6 @@ function appendChatMessage(role, text) {
 
 function escapeHtml(text) {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function jsonBody(obj) {
-  return JSON.stringify(obj);
 }
 
 function connectWebSocket() {
