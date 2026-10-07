@@ -49,6 +49,14 @@ function setupTabs() {
       }
     });
   });
+
+  const hash = window.location.hash ? window.location.hash.replace("#tab-", "").replace("#", "") : null;
+  if (hash) {
+    const targetBtn = document.querySelector(`.nav-btn[data-tab="${hash}"]`);
+    if (targetBtn) {
+      setTimeout(() => targetBtn.click(), 60);
+    }
+  }
 }
 
 async function loadFleetData() {

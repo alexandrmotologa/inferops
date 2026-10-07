@@ -1,0 +1,181 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <clipPath id="squircle-clip">
+      <rect x="24" y="24" width="976" height="976" rx="220" />
+    </clipPath>
+
+    <linearGradient id="cyan-glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f5ff"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+
+    <linearGradient id="horn-glow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="50%" stop-color="#00f5ff"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+
+    <linearGradient id="plate-light" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#334155"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+
+    <linearGradient id="plate-mid" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <linearGradient id="plate-shadow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#070b12"/>
+    </linearGradient>
+
+    <filter id="subtle-shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#000000" flood-opacity="0.14" />
+    </filter>
+  </defs>
+
+  <!-- Luxury White Squircle Container -->
+  <rect x="24" y="24" width="976" height="976" rx="220" fill="#ffffff" stroke="#e2e8f0" stroke-width="6" />
+
+  <g clip-path="url(#squircle-clip)">
+    <g transform="translate(512, 512)" filter="url(#subtle-shadow)">
+
+      <!-- Hexagonal Architectural Gateway Frame -->
+      <polygon points="
+        0,-390
+        338,-195
+        338,195
+        0,390
+        -338,195
+        -338,-195
+      " fill="none" stroke="#0f172a" stroke-width="38" stroke-linejoin="round" />
+
+      <polygon points="
+        0,-355
+        307,-177
+        307,177
+        0,355
+        -307,177
+        -307,-177
+      " fill="none" stroke="#00f5ff" stroke-width="4" opacity="0.45" stroke-dasharray="16, 12" />
+
+      <!-- Corner Alignment Accent Micro-Marks -->
+      <circle cx="0" cy="-390" r="6" fill="#00f5ff" />
+      <circle cx="338" cy="-195" r="6" fill="#00f5ff" />
+      <circle cx="338" cy="195" r="6" fill="#00f5ff" />
+      <circle cx="0" cy="390" r="6" fill="#00f5ff" />
+      <circle cx="-338" cy="195" r="6" fill="#00f5ff" />
+      <circle cx="-338" cy="-195" r="6" fill="#00f5ff" />
+
+      <!-- Watertight Base Silhouette (Guarantees zero vertex background leakage) -->
+      <polygon points="
+        0,-275
+        26,-175
+        42,-60
+        72,-112
+        132,-142
+        225,-225
+        195,-95
+        225,25
+        192,185
+        160,265
+        0,285
+        -160,265
+        -192,185
+        -225,25
+        -195,-95
+        -225,-225
+        -132,-142
+        -72,-112
+        -42,-60
+        -26,-175
+      " fill="#070b12" />
+
+      <!-- ================= LOW-POLY RHINO FACETS ================= -->
+
+      <!-- Lower Neck & Collar Plates (Deep Base) -->
+      <polygon points="0,285 -160,265 -192,185 -90,175 0,210" fill="url(#plate-shadow)" stroke="#1e293b" stroke-width="1.5" />
+      <polygon points="0,285 160,265 192,185 90,175 0,210" fill="url(#plate-mid)" stroke="#1e293b" stroke-width="1.5" />
+      <polygon points="0,210 -90,175 0,135" fill="#1e293b" stroke="#334155" stroke-width="1.5" />
+      <polygon points="0,210 90,175 0,135" fill="#334155" stroke="#475569" stroke-width="1.5" />
+
+      <!-- Massive Zygomatic Cheek Flanges -->
+      <polygon points="-192,185 -225,25 -165,70 -90,175" fill="url(#plate-shadow)" stroke="#1e293b" stroke-width="1.5" />
+      <polygon points="192,185 225,25 165,70 90,175" fill="url(#plate-mid)" stroke="#1e293b" stroke-width="1.5" />
+
+      <polygon points="-225,25 -195,-95 -165,-30 -165,70" fill="#0f172a" stroke="#1e293b" stroke-width="1.5" />
+      <polygon points="225,25 195,-95 165,-30 165,70" fill="#1e293b" stroke="#334155" stroke-width="1.5" />
+
+      <!-- Vigilant Angular Ears -->
+      <!-- Left Ear -->
+      <polygon points="-132,-142 -225,-225 -195,-95" fill="url(#plate-shadow)" stroke="#1e293b" stroke-width="1.5" />
+      <polygon points="-132,-142 -205,-205 -165,-120" fill="#00f5ff" opacity="0.25" />
+      <!-- Right Ear -->
+      <polygon points="132,-142 225,-225 195,-95" fill="url(#plate-light)" stroke="#334155" stroke-width="1.5" />
+      <polygon points="132,-142 205,-205 165,-120" fill="#00f5ff" opacity="0.38" />
+
+      <!-- Forehead & Cranial Armor Plate -->
+      <polygon points="0,-145 -72,-112 -132,-142 0,-185" fill="url(#plate-shadow)" stroke="#1e293b" stroke-width="1.5" />
+      <polygon points="0,-145 72,-112 132,-142 0,-185" fill="url(#plate-light)" stroke="#475569" stroke-width="1.5" />
+
+      <!-- Central Forehead Diamond -->
+      <polygon points="0,-145 -65,-75 0,-40 65,-75" fill="#1e293b" stroke="#334155" stroke-width="1.5" />
+
+      <!-- Armored Brow Arches Above Eyes -->
+      <polygon points="-72,-112 -195,-95 -165,-30 -65,-75" fill="url(#plate-shadow)" stroke="#1e293b" stroke-width="1.5" />
+      <polygon points="72,-112 195,-95 165,-30 65,-75" fill="url(#plate-light)" stroke="#475569" stroke-width="1.5" />
+
+      <!-- Almond Alert Predator Eyes (Electric Cyan Optics) -->
+      <!-- Left Eye Socket -->
+      <polygon points="-165,-30 -105,-42 -82,-20 -140,-12" fill="#070b12" stroke="#1e293b" stroke-width="1" />
+      <!-- Left Glowing Cyan Slit -->
+      <polygon points="-155,-28 -110,-38 -95,-22 -138,-16" fill="url(#cyan-glow)" />
+      <polygon points="-140,-26 -115,-32 -105,-24 -130,-20" fill="#ffffff" opacity="0.8" />
+
+      <!-- Right Eye Socket -->
+      <polygon points="165,-30 105,-42 82,-20 140,-12" fill="#070b12" stroke="#1e293b" stroke-width="1" />
+      <!-- Right Glowing Cyan Slit -->
+      <polygon points="155,-28 110,-38 95,-22 138,-16" fill="url(#cyan-glow)" />
+      <polygon points="140,-26 115,-32 105,-24 130,-20" fill="#ffffff" opacity="0.8" />
+
+      <!-- Mid-Face Lateral Furrow Plates -->
+      <polygon points="-65,-75 -140,-12 -85,55 -38,15" fill="url(#plate-shadow)" stroke="#1e293b" stroke-width="1.5" />
+      <polygon points="65,-75 140,-12 85,55 38,15" fill="url(#plate-light)" stroke="#334155" stroke-width="1.5" />
+
+      <!-- Broad Heavy Snout & Whisker Plates -->
+      <polygon points="-38,15 -85,55 -55,125 0,135" fill="#1e293b" stroke="#334155" stroke-width="1.5" />
+      <polygon points="38,15 85,55 55,125 0,135" fill="#334155" stroke="#475569" stroke-width="1.5" />
+
+      <polygon points="-85,55 -165,70 -90,175 -55,125" fill="url(#plate-shadow)" stroke="#1e293b" stroke-width="1.5" />
+      <polygon points="85,55 165,70 90,175 55,125" fill="url(#plate-mid)" stroke="#1e293b" stroke-width="1.5" />
+
+      <!-- Chin Point Base -->
+      <polygon points="0,135 -55,125 -40,165 0,172" fill="#0f172a" stroke="#1e293b" stroke-width="1.5" />
+      <polygon points="0,135 55,125 40,165 0,172" fill="#1e293b" stroke="#334155" stroke-width="1.5" />
+
+      <!-- Secondary Nasal Ridge Plate (Behind Horn) -->
+      <polygon points="0,-40 -38,15 0,45" fill="#1e293b" stroke="#334155" stroke-width="1.5" />
+      <polygon points="0,-40 38,15 0,45" fill="#334155" stroke="#475569" stroke-width="1.5" />
+
+      <!-- ================= THE IRON TITANIUM HORN ================= -->
+      <!-- The unstoppable focal telemetry vector -->
+
+      <!-- Left Horn Facet (Deep Shadow & Sharp Obsidian) -->
+      <polygon points="0,-275 0,-15 -42,-60 -26,-175" fill="url(#plate-shadow)" stroke="#1e293b" stroke-width="2" />
+      <polygon points="0,-275 0,-15 -18,-50 -12,-160" fill="#0f172a" opacity="0.6" />
+
+      <!-- Right Horn Facet (Titanium Armor Highlight) -->
+      <polygon points="0,-275 0,-15 42,-60 26,-175" fill="url(#plate-light)" stroke="#475569" stroke-width="2" />
+      <polygon points="0,-275 0,-15 18,-50 12,-160" fill="#475569" opacity="0.7" />
+
+      <!-- Horn Glowing Cyan Dorsal Crest (Inference Vector) -->
+      <polygon points="0,-272 5,-35 0,-25 -5,-35" fill="url(#horn-glow)" />
+      <polygon points="0,-265 2,-45 0,-38 -2,-45" fill="#ffffff" opacity="0.9" />
+
+      <!-- Horn Apex Nano-Point -->
+      <circle cx="0" cy="-275" r="4" fill="#00f5ff" />
+
+    </g>
+  </g>
+</svg>

@@ -1,6 +1,12 @@
-# InferOps
+<p align="center">
+  <img src="docs/images/logo.png?raw=true" alt="InferOps Logo" width="130" style="border-radius: 24px;" />
+</p>
 
-Bare-metal control plane and multi-engine supervisor for local LLM inference.
+<h1 align="center">InferOps</h1>
+
+<p align="center">
+  <em>Bare-metal control plane and multi-engine supervisor for local LLM inference</em>
+</p>
 
 InferOps manages `vLLM` and `SGLang` processes from declarative YAML manifests, calculates VRAM requirements before launching models to prevent out-of-memory errors, exposes an OpenAI-compatible routing gateway, and provides both a terminal interface and a web dashboard with a live chat playground.
 
@@ -59,6 +65,14 @@ Calculates parameter weights, KV cache overhead based on context length, and CUD
 ### Interactive Chat Playground
 Directly test streaming generation and latency on any active model through the integrated web dashboard.
 ![InferOps Chat Playground](docs/images/inferops-3.png)
+
+### Live Process Console
+Real-time log tailing across engine instances via WebSocket connections directly in the browser.
+![InferOps Live Console](docs/images/inferops-4.png)
+
+### Cost & Token Analytics
+Token throughput tracking with automatic calculation of commercial cost savings against closed cloud API benchmarks.
+![InferOps Cost Analytics](docs/images/inferops-5.png)
 
 ---
 
