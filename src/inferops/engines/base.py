@@ -33,13 +33,24 @@ class EngineAdapter(ABC):
         pass
 
     def build_environment(self, config: ModelConfig) -> Dict[str, str]:
-        """Prepare environment variables for the subprocess, injecting CUDA settings."""
+        """Prepare environment variables for subprocess, injecting multi-device settings."""
         env = dict(os.environ)
 
-        # Apply CUDA visible devices if specified
+        # Multi-vendor accelerator isolation
         cuda_devices = config.cuda_visible_devices
-        if cuda_devices:
+        if config.device.lower() == "cpu":
+            env["VLLM_TARGET_DEVICE"] = "cpu"
+            env["CUDA_VISIBLE_DEVICES"] = ""
+            env["HIP_VISIBLE_DEVICES"] = ""
+        elif cuda_devices:
             env["CUDA_VISIBLE_DEVICES"] = cuda_devices
+            # AMD ROCm visibility
+            env["HIP_VISIBLE_DEVICES"] = cuda_devices
+            env["ROCR_VISIBLE_DEVICES"] = cuda_devices
+
+        # Avoid PyTorch allocator memory fragmentation
+        if "PYTORCH_CUDA_ALLOC_CONF" not in env:
+            env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
         # Merge model-specific custom environment variables
         env.update(config.env)

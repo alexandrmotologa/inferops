@@ -61,14 +61,20 @@ function setupTabs() {
 
 async function loadFleetData() {
   try {
-    const [gpusRes, modelsRes] = await Promise.all([
+    const [gpusRes, modelsRes, hwRes] = await Promise.all([
       fetch("/api/gpus"),
       fetch("/api/models"),
+      fetch("/api/hardware"),
     ]);
+
+    let hw = null;
+    if (hwRes && hwRes.ok) {
+      hw = await hwRes.json();
+    }
 
     if (gpusRes.ok) {
       const gpus = await gpusRes.json();
-      renderGpuCards(gpus);
+      renderGpuCards(gpus, hw);
     }
     if (modelsRes.ok) {
       const models = await modelsRes.json();
@@ -81,19 +87,24 @@ async function loadFleetData() {
   }
 }
 
-function renderGpuCards(gpus) {
+function renderGpuCards(gpus, hw) {
   const container = document.getElementById("gpuCardsContainer");
   if (!container) return;
 
   if (!gpus || gpus.length === 0) {
+    const cpuInfo = hw ? `${hw.cpu_name} (${hw.cpu_cores} cores)` : "Host CPU";
+    const ramInfo = hw ? `${hw.host_ram_free_gb} GB free / ${hw.host_ram_total_gb} GB total` : "Available RAM";
     container.innerHTML = `
       <div class="gpu-card">
         <div class="gpu-header">
-          <span class="gpu-name">No Discrete NVIDIA GPU Detected</span>
-          <span class="gpu-badge">CPU / Fallback</span>
+          <span class="gpu-name">Host CPU Mode (No Discrete Accelerator)</span>
+          <span class="gpu-badge">CPU Architecture</span>
         </div>
-        <p style="font-size: 13px; color: var(--text-muted);">
-          InferOps is running in host or emulation mode. Ensure NVIDIA drivers and nvidia-smi are installed for hardware acceleration.
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 6px;">
+          CPU: <strong>${cpuInfo}</strong> | Host RAM: <strong>${ramInfo}</strong>
+        </p>
+        <p style="font-size: 12px; color: var(--text-muted);">
+          InferOps can serve models via CPU execution (<code>device: cpu</code>) or connect NVIDIA CUDA / AMD ROCm / Apple Metal accelerators.
         </p>
       </div>`;
     return;
@@ -102,11 +113,12 @@ function renderGpuCards(gpus) {
   container.innerHTML = gpus
     .map((g) => {
       const pct = g.total_memory_gb > 0 ? Math.round((g.used_memory_gb / g.total_memory_gb) * 100) : 0;
+      const vendorTag = (g.vendor || "gpu").toUpperCase();
       return `
       <div class="gpu-card">
         <div class="gpu-header">
-          <span class="gpu-name">GPU ${g.index}: ${g.name}</span>
-          <span class="gpu-badge">${g.temperature_c !== null ? g.temperature_c + "°C" : "N/A"}</span>
+          <span class="gpu-name">${vendorTag} ${g.index}: ${g.name}</span>
+          <span class="gpu-badge">${g.temperature_c !== null ? g.temperature_c + "°C" : vendorTag}</span>
         </div>
         <div class="progress-track">
           <div class="progress-fill" style="width: ${pct}%"></div>
@@ -271,7 +283,17 @@ function setupVramCalculator() {
 
         const banner = document.getElementById("vramVerdictBanner");
         banner.className = data.fits ? "verdict-banner pass" : "verdict-banner fail";
-        banner.innerHTML = `<strong>${data.fits ? "[PASS] Model Fits Memory" : "[WARNING] Out of Memory Risk"}</strong><br>${data.suggestion}`;
+
+        let archBadge = "";
+        if (data.architecture_type === "deepseek-mla") {
+          archBadge = `<span style="display:inline-block; margin-top:4px; margin-bottom:4px; padding:2px 8px; border-radius:4px; font-size:12px; background:rgba(0,240,255,0.15); color:#00f0ff; border:1px solid rgba(0,240,255,0.3);">⚡ DeepSeek MLA (Compressed Latent KV Cache) | ${data.params_b}B Total (${data.active_params_b || 37}B Active)</span><br>`;
+        } else if (data.is_moe) {
+          archBadge = `<span style="display:inline-block; margin-top:4px; margin-bottom:4px; padding:2px 8px; border-radius:4px; font-size:12px; background:rgba(180,90,255,0.15); color:#d084ff; border:1px solid rgba(180,90,255,0.3);">🔀 Mixture-of-Experts (MoE) | ${data.params_b}B Total (${data.active_params_b || '--'}B Active)</span><br>`;
+        } else if (data.architecture_type === "vlm") {
+          archBadge = `<span style="display:inline-block; margin-top:4px; margin-bottom:4px; padding:2px 8px; border-radius:4px; font-size:12px; background:rgba(255,180,0,0.15); color:#ffc83b; border:1px solid rgba(255,180,0,0.3);">👁️ Vision-Language Multimodal (VLM)</span><br>`;
+        }
+
+        banner.innerHTML = `<strong>${data.fits ? "[PASS] Model Fits Memory" : "[WARNING] Out of Memory Risk"}</strong><br>${archBadge}${data.suggestion}`;
 
         document.getElementById("vramResultBox").classList.remove("hidden");
       }

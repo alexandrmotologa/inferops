@@ -48,6 +48,14 @@ class SglangEngineAdapter(EngineAdapter):
         if config.kv_cache_dtype and config.kv_cache_dtype != "auto":
             cmd.extend(["--kv-cache-dtype", config.kv_cache_dtype])
 
+        if config.trust_remote_code:
+            cmd.append("--trust-remote-code")
+
+        if config.speculative_model:
+            cmd.extend(["--speculative-draft-model", config.speculative_model])
+            if config.num_speculative_tokens:
+                cmd.extend(["--speculative-num-steps", str(config.num_speculative_tokens)])
+
         if config.lora_modules:
             cmd.append("--enable-lora")
             for mod in config.lora_modules:

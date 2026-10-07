@@ -30,7 +30,7 @@ from inferops.export.docker import generate_docker_compose
 from inferops.export.k8s import generate_kubernetes_manifest
 from inferops.gateway.accounting import TokenAccountingManager
 from inferops.gateway.router import ModelGatewayRouter
-from inferops.hardware.gpu import get_gpu_devices
+from inferops.hardware.gpu import get_gpu_devices, get_hardware_summary, get_host_memory_gb
 from inferops.hardware.topology import inspect_gpu_topology
 from inferops.web.server import create_web_app
 
@@ -356,8 +356,12 @@ def doctor(
     """Run comprehensive diagnostics for system, CUDA, GPUs, and engine runtimes."""
     console.print("[bold cyan]Running InferOps Environment Diagnostics...[/bold cyan]\n")
 
-    # 1. OS & Python
-    console.print(f"[bold]Python:[/bold] {sys.version.split()[0]} ({sys.platform})")
+    # 1. OS, CPU, & Host RAM
+    hw = get_hardware_summary()
+    total_ram, free_ram = get_host_memory_gb()
+    console.print(f"[bold]Platform:[/bold] {sys.platform} | Python {sys.version.split()[0]}")
+    console.print(f"[bold]Host CPU:[/bold] {hw.get('cpu_name')} ({hw.get('cpu_cores')} cores)")
+    console.print(f"[bold]System RAM:[/bold] [cyan]{free_ram} GB available[/cyan] / {total_ram} GB total")
 
     # 2. Executable checks
     vllm_avail = shutil.which("vllm") is not None
@@ -365,14 +369,24 @@ def doctor(
     console.print(f"[bold]vLLM binary:[/bold] {'[green]Installed[/green]' if vllm_avail else '[yellow]Not on PATH (will use python module)[/yellow]'}")
     console.print(f"[bold]SGLang binary:[/bold] {'[green]Installed[/green]' if sglang_avail else '[yellow]Not on PATH (will use python module)[/yellow]'}")
 
-    # 3. GPUs
+    # 3. Accelerators (NVIDIA CUDA, AMD ROCm, Apple Silicon, or CPU)
     gpus = get_gpu_devices()
     if gpus:
-        console.print(f"[bold green]Detected {len(gpus)} GPU(s):[/bold green]")
+        vendor_label = gpus[0].vendor.upper()
+        console.print(f"\n[bold green]Detected {len(gpus)} {vendor_label} Accelerator(s):[/bold green]")
         for g in gpus:
-            console.print(f"  * GPU {g.index}: [cyan]{g.name}[/cyan] - {g.free_memory_gb}/{g.total_memory_gb} GB Free ({g.utilization_gpu_pct}% load)")
+            temp_str = f", {g.temperature_c}°C" if g.temperature_c else ""
+            power_str = f", {g.power_watts:.0f}W" if g.power_watts else ""
+            console.print(
+                f"  * Device {g.index} [{g.vendor.upper()}]: [cyan]{g.name}[/cyan] - "
+                f"{g.free_memory_gb}/{g.total_memory_gb} GB Free ({g.utilization_gpu_pct}% load{temp_str}{power_str})"
+            )
     else:
-        console.print("[yellow]No discrete NVIDIA GPU detected via nvidia-smi / NVML.[/yellow]")
+        console.print(
+            "\n[yellow]No discrete GPU accelerator detected (NVIDIA/ROCm/Apple Metal).[/yellow]\n"
+            f"[dim]InferOps will run in Host CPU mode using {hw.get('cpu_cores')} CPU cores and {free_ram} GB available RAM.\n"
+            "To serve on CPU with vLLM, ensure VLLM_TARGET_DEVICE=cpu is configured in your manifest.[/dim]"
+        )
 
     # 4. Deep Interconnect Topology
     if deep:

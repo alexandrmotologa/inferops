@@ -86,7 +86,19 @@
           <div class="sizer-form-grid">
             <div class="form-group">
               <label for="sizerModelInput">Model Identifier or HF Path</label>
-              <input type="text" id="sizerModelInput" value="Qwen/Qwen2.5-Coder-7B-Instruct" class="input-field" placeholder="e.g. meta-llama/Llama-3.1-8B-Instruct">
+              <input type="text" id="sizerModelInput" list="popularModels" value="Qwen/Qwen2.5-Coder-7B-Instruct" class="input-field" placeholder="e.g. meta-llama/Llama-3.1-8B-Instruct">
+              <datalist id="popularModels">
+                <option value="Qwen/Qwen2.5-Coder-7B-Instruct">
+                <option value="meta-llama/Llama-3.1-8B-Instruct">
+                <option value="meta-llama/Llama-3.1-70B-Instruct">
+                <option value="deepseek-ai/DeepSeek-V3">
+                <option value="deepseek-ai/DeepSeek-R1">
+                <option value="mistralai/Mixtral-8x22B-Instruct-v0.1">
+                <option value="mistralai/Mixtral-8x7B-Instruct-v0.1">
+                <option value="microsoft/phi-4">
+                <option value="google/gemma-2-9b-it">
+                <option value="Qwen/Qwen2-VL-7B-Instruct">
+              </datalist>
             </div>
 
             <div class="form-group">

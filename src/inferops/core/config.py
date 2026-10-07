@@ -85,6 +85,24 @@ class ModelConfig(BaseModel):
         default_factory=list,
         description="List of LoRA modules as [{'name': 'alias', 'path': '/path/or/repo'}]",
     )
+    trust_remote_code: bool = Field(
+        default=False,
+        description="Whether to trust remote executable code from Hugging Face repository",
+    )
+    device: str = Field(
+        default="auto",
+        description="Target execution device/backend: auto, cuda, rocm, cpu, mps",
+    )
+    speculative_model: Optional[str] = Field(
+        default=None,
+        description="Draft model repository or path used for speculative decoding acceleration",
+    )
+    num_speculative_tokens: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=16,
+        description="Number of speculative tokens drafted per iteration",
+    )
 
     @field_validator("name")
     @classmethod

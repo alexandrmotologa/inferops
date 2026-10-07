@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from inferops.core.config import discover_models
 from inferops.core.supervisor import ModelLifecycleStatus, ProcessSupervisor
 from inferops.core.vram_calculator import calculate_vram_requirements
-from inferops.hardware.gpu import get_gpu_devices
+from inferops.hardware.gpu import get_gpu_devices, get_hardware_summary
 from inferops.hardware.metrics import fetch_model_metrics
 
 
@@ -64,6 +64,7 @@ def create_web_app(workspace_dir: Path) -> FastAPI:
             {
                 "index": g.index,
                 "name": g.name,
+                "vendor": g.vendor,
                 "total_memory_gb": g.total_memory_gb,
                 "free_memory_gb": g.free_memory_gb,
                 "used_memory_gb": g.used_memory_gb,
@@ -74,6 +75,10 @@ def create_web_app(workspace_dir: Path) -> FastAPI:
             }
             for g in gpus
         ]
+
+    @app.get("/api/hardware")
+    async def api_get_hardware() -> Dict[str, Any]:
+        return get_hardware_summary()
 
     @app.get("/api/models")
     async def api_list_models() -> List[Dict[str, Any]]:
@@ -135,6 +140,9 @@ def create_web_app(workspace_dir: Path) -> FastAPI:
             "total_gb": est.total_required_vram_gb,
             "per_gpu_gb": est.vram_per_gpu_gb,
             "fits": est.fits,
+            "is_moe": est.is_moe,
+            "active_params_b": est.active_params_b,
+            "architecture_type": est.architecture_type,
             "suggestion": est.suggestion,
         }
 
