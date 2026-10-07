@@ -37,9 +37,12 @@ InferOps manages `vLLM` and `SGLang` processes from declarative YAML manifests, 
 
 ## Key Capabilities
 
-* **Multi-Engine Support**: Run `vLLM` and `SGLang` side by side with consistent lifecycle commands (`start`, `stop`, `restart`, `status`, `health`, `logs`).
-* **Heterogeneous Hardware**: Auto-detects and isolates NVIDIA CUDA, AMD ROCm (`HIP_VISIBLE_DEVICES`), Apple Silicon unified memory, and Host CPU execution (`VLLM_TARGET_DEVICE=cpu`).
+* **Multi-Engine Support**: Run `vLLM`, `SGLang`, and `llama.cpp` side by side with consistent lifecycle commands (`start`, `stop`, `restart`, `status`, `health`, `logs`).
+* **Heterogeneous Hardware**: Auto-detects and isolates NVIDIA CUDA, AMD ROCm (`HIP_VISIBLE_DEVICES`), Apple Silicon unified memory (Metal), and Host CPU execution (`VLLM_TARGET_DEVICE=cpu`).
 * **Deep Architecture Support**: Accurate sizing and serving for Dense, MoE (Mixtral 8x7B/8x22B, DeepSeek 671B), DeepSeek MLA (Multi-Head Latent Attention compressed KV cache), Microsoft Phi-4, and Vision-Language Models (VLMs).
+* **GGUF & CPU/Metal Offloading**: Full support for quantized GGUF models on consumer laptops, Apple Silicon Mac Studio, and pure CPU servers via `llama.cpp`.
+* **Automated Crash Watchdog**: Background healing daemon that auto-revives crashed inference engines with exponential backoff (`inferops watchdog`).
+* **Production Observability Stack**: Export production Grafana 10+ dashboards (`inferops export grafana`) and Prometheus scrape configurations (`inferops export prometheus`).
 * **Speculative Decoding**: Accelerate large models using draft speculative models configured directly in declarative YAML manifests.
 * **HuggingFace Hub Integration**: Pull model architecture directly from HuggingFace to synthesize manifests and run pre-flight VRAM checks (`inferops pull`).
 * **Predictive VRAM Sizing**: Calculates weights, GQA/MLA KV cache, and runtime overhead before starting a model to verify that GPU memory is sufficient.
@@ -217,10 +220,13 @@ inferops tui
 | `inferops status` | Displays process table, PIDs, ports, and health |
 | `inferops logs <model>` | Streams runtime engine logs |
 | `inferops benchmark <model>`| Profiles throughput and TTFT under synthetic load |
+| `inferops watchdog` | Runs background auto-healing daemon with exponential crash backoff |
 | `inferops proxy [--auth]` | Starts the OpenAI-compatible reverse proxy with scale-to-zero |
 | `inferops usage` | Displays token consumption accounting and commercial savings |
 | `inferops key <create/list>` | Manages cryptographic API keys and rate limits |
 | `inferops export <compose/k8s>` | Generates production Docker Compose and Kubernetes manifests |
+| `inferops export grafana` | Generates Grafana 10+ dashboard JSON with throughput & VRAM panels |
+| `inferops export prometheus` | Generates prometheus.yml scrape configuration |
 | `inferops web` | Launches browser dashboard, playground, Live Console, and analytics |
 | `inferops tui` | Opens the Textual terminal monitor |
 

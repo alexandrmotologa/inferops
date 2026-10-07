@@ -1,5 +1,4 @@
-"""Cross-platform asynchronous process supervisor for inference engines."""
-
+import asyncio
 import ctypes
 import json
 import os
@@ -10,7 +9,7 @@ import time
 from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from inferops.core.config import ModelConfig
 from inferops.core.exceptions import PortConflictError, ProcessCrashedError, ProcessStartupTimeoutError
@@ -272,3 +271,78 @@ class ProcessSupervisor:
         stopped = terminate_pid(record.pid, timeout_sec=timeout_sec)
         self.remove_record(model_name)
         return stopped
+
+
+@dataclass
+class WatchdogRecoveryEvent:
+    model_name: str
+    timestamp: float
+    attempt: int
+    success: bool
+    message: str
+
+
+class ProcessWatchdog:
+    """Monitors running inference engines and automatically heals crashed processes."""
+
+    def __init__(
+        self,
+        supervisor: ProcessSupervisor,
+        models_catalog: Dict[str, ModelConfig],
+        max_restart_attempts: int = 3,
+        backoff_base_sec: float = 2.0,
+    ) -> None:
+        self.supervisor = supervisor
+        self.models_catalog = models_catalog
+        self.max_restart_attempts = max_restart_attempts
+        self.backoff_base_sec = backoff_base_sec
+        self.restart_counts: Dict[str, int] = {}
+        self.history: List[WatchdogRecoveryEvent] = []
+
+    async def check_and_heal(self) -> List[WatchdogRecoveryEvent]:
+        """Inspect all models and automatically restart any that crashed."""
+        events: List[WatchdogRecoveryEvent] = []
+        for name, config in self.models_catalog.items():
+            record = self.supervisor.get_record(name)
+            if not record:
+                continue
+
+            # If recorded as active but PID is dead -> CRASHED!
+            if not is_process_running(record.pid):
+                attempts = self.restart_counts.get(name, 0)
+                if attempts >= self.max_restart_attempts:
+                    msg = f"Model '{name}' exceeded max restart attempts ({self.max_restart_attempts}). Abandoning auto-heal."
+                    self.supervisor.remove_record(name)
+                    event = WatchdogRecoveryEvent(name, time.time(), attempts, False, msg)
+                    events.append(event)
+                    self.history.append(event)
+                    continue
+
+                backoff = self.backoff_base_sec ** attempts
+                msg = f"Crash detected for '{name}' (PID {record.pid}). Auto-healing with {backoff:.1f}s backoff (attempt {attempts + 1}/{self.max_restart_attempts})..."
+                self.supervisor.remove_record(name)
+                await asyncio.sleep(min(backoff, 5.0))
+
+                try:
+                    new_record = await self.supervisor.start_model(config, wait=False)
+                    self.restart_counts[name] = attempts + 1
+                    event = WatchdogRecoveryEvent(
+                        name,
+                        time.time(),
+                        attempts + 1,
+                        True,
+                        f"Successfully revived '{name}' with new PID {new_record.pid}",
+                    )
+                    events.append(event)
+                    self.history.append(event)
+                except Exception as e:
+                    event = WatchdogRecoveryEvent(name, time.time(), attempts + 1, False, f"Failed to restart '{name}': {e}")
+                    events.append(event)
+                    self.history.append(event)
+
+            else:
+                # If running healthy for a while, reset restart counter
+                if record.status == ModelLifecycleStatus.HEALTHY and (time.time() - record.started_at) > 120:
+                    self.restart_counts[name] = 0
+
+        return events

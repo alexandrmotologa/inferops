@@ -2,12 +2,14 @@
 
 from inferops.core.config import EngineType
 from inferops.engines.base import EngineAdapter
+from inferops.engines.llamacpp import LlamaCppEngineAdapter
 from inferops.engines.sglang import SglangEngineAdapter
 from inferops.engines.vllm import VllmEngineAdapter
 
 _ENGINES: dict[EngineType, type[EngineAdapter]] = {
     EngineType.VLLM: VllmEngineAdapter,
     EngineType.SGLANG: SglangEngineAdapter,
+    EngineType.LLAMACPP: LlamaCppEngineAdapter,
 }
 
 
@@ -19,4 +21,10 @@ def get_engine_adapter(engine: EngineType) -> EngineAdapter:
     return adapter_cls()
 
 
-__all__ = ["EngineAdapter", "VllmEngineAdapter", "SglangEngineAdapter", "get_engine_adapter"]
+__all__ = [
+    "EngineAdapter",
+    "VllmEngineAdapter",
+    "SglangEngineAdapter",
+    "LlamaCppEngineAdapter",
+    "get_engine_adapter",
+]

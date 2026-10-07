@@ -1,0 +1,57 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+scrape_configs:
+- job_name: inferops-gateway
+  scrape_interval: 5s
+  metrics_path: /metrics
+  static_configs:
+  - targets:
+    - localhost:8000
+    labels:
+      app: inferops
+      role: gateway
+- job_name: inferops-engine-llama3.1-8b
+  scrape_interval: 5s
+  metrics_path: /metrics
+  static_configs:
+  - targets:
+    - localhost:8002
+    labels:
+      app: inferops
+      role: engine
+      model: llama3.1-8b
+      engine: sglang
+- job_name: inferops-engine-mistral-7b
+  scrape_interval: 5s
+  metrics_path: /metrics
+  static_configs:
+  - targets:
+    - localhost:8003
+    labels:
+      app: inferops
+      role: engine
+      model: mistral-7b
+      engine: vllm
+- job_name: inferops-engine-qwen2.5-0.5b-instruct
+  scrape_interval: 5s
+  metrics_path: /metrics
+  static_configs:
+  - targets:
+    - localhost:8004
+    labels:
+      app: inferops
+      role: engine
+      model: qwen2.5-0.5b-instruct
+      engine: vllm
+- job_name: inferops-engine-qwen2.5-coder-7b
+  scrape_interval: 5s
+  metrics_path: /metrics
+  static_configs:
+  - targets:
+    - localhost:8001
+    labels:
+      app: inferops
+      role: engine
+      model: qwen2.5-coder-7b
+      engine: vllm

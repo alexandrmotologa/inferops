@@ -27,7 +27,9 @@ from inferops.core.supervisor import ModelLifecycleStatus, ProcessSupervisor
 from inferops.core.tuner import tune_model_for_hardware
 from inferops.core.vram_calculator import calculate_vram_requirements
 from inferops.export.docker import generate_docker_compose
+from inferops.export.grafana import generate_grafana_dashboard
 from inferops.export.k8s import generate_kubernetes_manifest
+from inferops.export.prometheus import generate_prometheus_config
 from inferops.gateway.accounting import TokenAccountingManager
 from inferops.gateway.router import ModelGatewayRouter
 from inferops.hardware.gpu import get_gpu_devices, get_hardware_summary, get_host_memory_gb
@@ -556,6 +558,41 @@ def tune(
 
 
 @app.command()
+def watchdog(
+    interval: float = typer.Option(5.0, "--interval", "-i", help="Check interval in seconds"),
+    max_retries: int = typer.Option(3, "--max-retries", "-r", help="Maximum automatic restart attempts per model"),
+) -> None:
+    """Run background crash watchdog daemon to auto-restart crashed inference engines."""
+    from inferops.core.supervisor import ProcessWatchdog
+    ws = get_workspace()
+    models_dir = ws / "configs" / "models"
+    catalog = discover_models(models_dir)
+    supervisor = ProcessSupervisor(ws / "runtime")
+    watchdog_instance = ProcessWatchdog(supervisor, catalog, max_restart_attempts=max_retries)
+
+    console.print(Panel.fit(
+        f"[bold green]InferOps Process Watchdog Active[/bold green]\n\n"
+        f"Monitoring [cyan]{len(catalog)} configured model(s)[/cyan]\n"
+        f"Poll Interval: [cyan]{interval}s[/cyan] | Max Auto-Restarts: [cyan]{max_retries}[/cyan]\n\n"
+        f"Press Ctrl+C to terminate watchdog.",
+        title="Crash Healing Watchdog",
+    ))
+
+    async def run_loop():
+        while True:
+            events = await watchdog_instance.check_and_heal()
+            for ev in events:
+                style = "bold green" if ev.success else "bold red"
+                console.print(f"[{style}][WATCHDOG][/{style}] {ev.message}")
+            await asyncio.sleep(interval)
+
+    try:
+        asyncio.run(run_loop())
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Watchdog stopped.[/yellow]")
+
+
+@app.command()
 def benchmark(
     model_name: str = typer.Argument(..., help="Name of running model to benchmark"),
     requests: int = typer.Option(10, "--requests", "-r", help="Total requests to fire"),
@@ -887,6 +924,48 @@ def export_k8s(
         console.print(f"[bold green][OK] Kubernetes manifests written to {output}[/bold green]")
     else:
         console.print(k8s_yaml)
+
+
+@export_app.command("grafana")
+def export_grafana(
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="File to write Grafana dashboard JSON to"),
+    title: str = typer.Option("InferOps LLM Inference Control Plane", "--title", "-t", help="Dashboard title"),
+) -> None:
+    """Generate production Grafana 10+ dashboard JSON model with token and hardware panels."""
+    import json
+    dashboard = generate_grafana_dashboard(title=title)
+    dashboard_json = json.dumps(dashboard, indent=2)
+
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(dashboard_json, encoding="utf-8")
+        console.print(f"[bold green][OK] Grafana dashboard JSON written to {output}[/bold green]")
+    else:
+        console.print(dashboard_json)
+
+
+@export_app.command("prometheus")
+def export_prometheus(
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="File to write prometheus.yml to"),
+    gateway_port: int = typer.Option(8000, "--gateway-port", "-g", help="InferOps gateway port"),
+) -> None:
+    """Generate production Prometheus scrape configuration (prometheus.yml) targeting InferOps."""
+    ws = get_workspace()
+    models_dir = ws / "configs" / "models"
+    catalog = discover_models(models_dir)
+
+    prom_yaml = generate_prometheus_config(
+        models=list(catalog.values()),
+        gateway_host="localhost",
+        gateway_port=gateway_port,
+    )
+
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(prom_yaml, encoding="utf-8")
+        console.print(f"[bold green][OK] Prometheus configuration written to {output}[/bold green]")
+    else:
+        console.print(prom_yaml)
 
 
 if __name__ == "__main__":

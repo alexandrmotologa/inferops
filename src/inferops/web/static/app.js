@@ -255,7 +255,7 @@ function setupVramCalculator() {
     const dtype = document.getElementById("sizerDtypeSelect").value;
     const tp = parseInt(document.getElementById("sizerTpInput").value, 10);
 
-    const quant = ["awq", "gptq", "fp8"].includes(dtype) ? dtype : null;
+    const quant = ["awq", "gptq", "fp8", "q4_k_m", "q5_k_m", "q8_0"].includes(dtype) ? dtype : null;
     const actualDtype = quant ? "auto" : dtype;
 
     btn.disabled = true;

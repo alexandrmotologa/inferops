@@ -189,16 +189,24 @@ def get_bytes_per_param(dtype: str, quantization: Optional[str] = None) -> float
     q = (quantization or "").lower()
     d = (dtype or "auto").lower()
 
-    if q in ("awq", "gptq", "int4", "q4_k_m"):
+    if q in ("awq", "gptq", "int4", "q4_k_m", "q4_0", "q4_1"):
         return 0.55  # 4-bit with metadata/scales
-    if q in ("int3", "q3_k_m"):
+    if q in ("q5_k_m", "q5_0", "q5_1", "int5"):
+        return 0.68  # 5-bit
+    if q in ("q6_k", "int6"):
+        return 0.82  # 6-bit
+    if q in ("int3", "q3_k_m", "q3_k_s"):
         return 0.42
+    if q in ("q2_k", "int2"):
+        return 0.32
     if q in ("fp8", "fp8_e4m3", "fp8_e5m2"):
         return 1.05
     if q in ("int8", "q8_0"):
         return 1.10
     if q in ("bitsandbytes", "bnb"):
         return 0.60
+    if q == "gguf":
+        return 0.55  # Default GGUF assumption to 4-bit
 
     if d in ("fp8", "float8"):
         return 1.05
@@ -219,6 +227,7 @@ def calculate_vram_requirements(
     concurrent_requests: int = 16,
     kv_cache_dtype: str = "auto",
     available_vram_per_gpu_gb: Optional[float] = None,
+    gpu_layers: Optional[int] = None,
 ) -> VRAMEstimate:
     """Compute exact required GPU memory breakdown and feasibility."""
     tp = max(1, tensor_parallel_size)
@@ -232,6 +241,12 @@ def calculate_vram_requirements(
     # Add vision encoder overhead if multimodal model
     if spec and spec.is_vision:
         weights_gb += spec.vision_encoder_gb
+
+    # Calculate partial layer offload (e.g. for llama.cpp -ngl)
+    if gpu_layers is not None:
+        total_layers = spec.num_layers if spec else 32
+        offload_ratio = min(1.0, max(0.0, gpu_layers / total_layers))
+        weights_gb = weights_gb * offload_ratio
 
     # 2. KV Cache memory
     kv_bytes = 1.0 if kv_cache_dtype.lower() in ("fp8", "int8") else 2.0
@@ -337,4 +352,5 @@ class VRAMCalculator:
             quantization=getattr(config, "quantization", None),
             tensor_parallel_size=getattr(config, "tensor_parallel_size", 1),
             available_vram_per_gpu_gb=available_vram_gb,
+            gpu_layers=getattr(config, "gpu_layers", None),
         )

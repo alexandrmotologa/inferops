@@ -15,6 +15,7 @@ from inferops.core.exceptions import ConfigurationError
 class EngineType(str, Enum):
     VLLM = "vllm"
     SGLANG = "sglang"
+    LLAMACPP = "llamacpp"
 
 
 def interpolate_env_vars(text: str) -> str:
@@ -102,6 +103,15 @@ class ModelConfig(BaseModel):
         ge=1,
         le=16,
         description="Number of speculative tokens drafted per iteration",
+    )
+    gpu_layers: Optional[int] = Field(
+        default=None,
+        description="Number of layers to offload to GPU/Metal in llama.cpp (-ngl / --n-gpu-layers). 99=full GPU, 0=CPU",
+    )
+    threads: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="Number of CPU compute threads to allocate in llama.cpp (-t / --threads)",
     )
 
     @field_validator("name")
