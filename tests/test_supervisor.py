@@ -2,9 +2,10 @@
 
 import time
 from pathlib import Path
+
 import pytest
 
-from inferops.core.config import EngineType, ModelConfig
+from inferops.core.config import ModelConfig
 from inferops.core.supervisor import (
     ModelLifecycleStatus,
     ProcessRecord,

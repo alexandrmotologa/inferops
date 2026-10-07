@@ -1,6 +1,5 @@
 """Cross-platform asynchronous process supervisor for inference engines."""
 
-import asyncio
 import ctypes
 import json
 import os
@@ -11,7 +10,7 @@ import time
 from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from inferops.core.config import ModelConfig
 from inferops.core.exceptions import PortConflictError, ProcessCrashedError, ProcessStartupTimeoutError

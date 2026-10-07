@@ -1,6 +1,7 @@
 """Unit tests for the Web Dashboard API server."""
 
 from pathlib import Path
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 

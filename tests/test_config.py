@@ -1,7 +1,7 @@
 """Unit tests for configuration models and YAML parser."""
 
-import os
 from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -14,7 +14,6 @@ from inferops.core.config import (
     load_profiles,
     save_model_config,
 )
-from inferops.core.exceptions import ConfigurationError
 
 
 def test_interpolate_env_vars(monkeypatch: pytest.MonkeyPatch) -> None:

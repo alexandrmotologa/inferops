@@ -1,18 +1,16 @@
 """Interactive Terminal User Interface (TUI) for InferOps using Textual."""
 
-import asyncio
 from pathlib import Path
 from typing import Dict, Optional
 
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container, Vertical
 from textual.reactive import reactive
-from textual.widgets import DataTable, Footer, Header, Log, ProgressBar, Static
+from textual.widgets import DataTable, Footer, Header, Log, Static
 
 from inferops.core.config import ModelConfig, discover_models
-from inferops.core.supervisor import ModelLifecycleStatus, ProcessSupervisor
+from inferops.core.supervisor import ProcessSupervisor
 from inferops.hardware.gpu import GPUDeviceInfo, get_gpu_devices
-from inferops.hardware.metrics import fetch_model_metrics
 
 
 class GpuWidget(Static):

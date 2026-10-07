@@ -77,8 +77,12 @@ timeout = 30
 addopts = "-ra -q"
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501", "F841"]
 
 [tool.mypy]
 python_version = "3.10"

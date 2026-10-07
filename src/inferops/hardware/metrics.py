@@ -3,8 +3,9 @@
 import re
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Deque, Dict, List, Optional
+
 import httpx
 
 

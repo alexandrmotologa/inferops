@@ -1,9 +1,9 @@
 """Dynamic OpenAI-compatible reverse proxy and model router."""
 
-import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
+
 import httpx
-from fastapi import APIRouter, FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 
 from inferops.core.config import ModelConfig

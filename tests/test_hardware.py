@@ -1,6 +1,7 @@
 """Unit tests for GPU hardware queries and Prometheus metrics parsing."""
 
 import time
+
 from inferops.hardware.gpu import GPUDeviceInfo, get_gpu_devices
 from inferops.hardware.metrics import (
     MetricsRingBuffer,

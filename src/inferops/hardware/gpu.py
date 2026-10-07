@@ -1,6 +1,5 @@
 """Hardware detection and GPU telemetry (NVIDIA NVML & ROCm)."""
 
-import json
 import shutil
 import subprocess
 from dataclasses import dataclass

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Dict, Union
+
 import yaml
 
 from inferops.core.config import ModelConfig

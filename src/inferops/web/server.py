@@ -1,22 +1,20 @@
 """Web Dashboard backend API server with WebSockets and Chat Playground."""
 
 import asyncio
-import json
-import os
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
 import httpx
-from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from inferops.core.config import ModelConfig, discover_models, load_profiles
+from inferops.core.config import discover_models
 from inferops.core.supervisor import ModelLifecycleStatus, ProcessSupervisor
 from inferops.core.vram_calculator import calculate_vram_requirements
-from inferops.gateway.router import ModelGatewayRouter
 from inferops.hardware.gpu import get_gpu_devices
 from inferops.hardware.metrics import fetch_model_metrics
 

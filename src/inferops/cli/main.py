@@ -1,7 +1,6 @@
 """InferOps main CLI dispatcher with rich formatted terminal outputs."""
 
 import asyncio
-import os
 import shutil
 import sys
 from pathlib import Path
@@ -14,6 +13,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from inferops import __version__
+from inferops.core.benchmark import run_model_benchmark
 from inferops.core.config import (
     EngineType,
     ModelConfig,
@@ -23,6 +23,7 @@ from inferops.core.config import (
     save_model_config,
 )
 from inferops.core.supervisor import ModelLifecycleStatus, ProcessSupervisor
+from inferops.core.tuner import tune_model_for_hardware
 from inferops.core.vram_calculator import calculate_vram_requirements
 from inferops.gateway.router import ModelGatewayRouter
 from inferops.hardware.gpu import get_gpu_devices
@@ -427,6 +428,124 @@ def proxy(
     uvicorn.run(fastapi_proxy, host=host, port=port, log_level="warning")
 
 
+@app.command()
+def logs(
+    model_name: str = typer.Argument(..., help="Model name to display logs for"),
+    lines: int = typer.Option(50, "--lines", "-n", help="Number of trailing lines to view"),
+    follow: bool = typer.Option(False, "--follow", "-f", help="Follow log output in real-time"),
+) -> None:
+    """Display or follow the stdout/stderr log output of a model."""
+    ws = get_workspace()
+    log_file = ws / "runtime" / "logs" / f"{model_name}.log"
+    if not log_file.is_file():
+        console.print(f"[yellow]No log file found for '{model_name}' at {log_file}[/yellow]")
+        return
+
+    import time as pytime
+    try:
+        with log_file.open("r", encoding="utf-8", errors="replace") as f:
+            all_lines = f.readlines()
+            for line in all_lines[-lines:]:
+                console.print(line, end="")
+
+            if follow:
+                console.print("[dim]-- Following log stream (Ctrl+C to exit) --[/dim]")
+                while True:
+                    line = f.readline()
+                    if line:
+                        console.print(line, end="")
+                    else:
+                        pytime.sleep(0.5)
+    except KeyboardInterrupt:
+        pass
+
+
+@app.command()
+def tune(
+    model_or_hf_id: str = typer.Argument(..., help="Hugging Face repo id or model name"),
+    engine: str = typer.Option("vllm", "--engine", "-e", help="Target engine: vllm or sglang"),
+    save: bool = typer.Option(False, "--save", "-s", help="Save tuned model configuration to configs/models/"),
+) -> None:
+    """Auto-tune model configuration based on detected hardware and VRAM headroom."""
+    eng_enum = EngineType.VLLM if engine.lower() == "vllm" else EngineType.SGLANG
+    rec = tune_model_for_hardware(model_or_hf_id, target_engine=eng_enum)
+
+    table = Table(title=f"Hardware Tuning Recommendation: {model_or_hf_id}", border_style="green")
+    table.add_column("Parameter", style="cyan")
+    table.add_column("Recommended Value", style="bold green")
+
+    table.add_row("Model Name", rec.suggested_name)
+    table.add_row("Engine", rec.suggested_engine.value.upper())
+    table.add_row("Tensor Parallel Size", str(rec.tensor_parallel_size))
+    table.add_row("Assigned GPUs", str(rec.gpus))
+    table.add_row("GPU Memory Utilization", f"{rec.gpu_memory_utilization:.2f}")
+    table.add_row("Max Model Len (Context)", f"{rec.max_model_len:,} tokens")
+    table.add_row("Data Precision (DType)", rec.dtype)
+    table.add_row("Quantization", rec.quantization or "None (Full 16-bit)")
+    table.add_row("KV Cache DType", rec.kv_cache_dtype)
+    table.add_section()
+    table.add_row("Estimated VRAM / GPU", f"{rec.estimated_vram_per_gpu_gb:.2f} GB")
+    table.add_row("Free VRAM Margin", f"{rec.hardware_headroom_gb:.2f} GB")
+
+    console.print(table)
+    for r in rec.rationale:
+        console.print(f"  * {r}")
+
+    if save:
+        ws = get_workspace()
+        target_path = ws / "configs" / "models" / f"{rec.suggested_name}.yaml"
+        save_model_config(rec.to_model_config(), target_path)
+        console.print(f"\n[bold green][OK] Saved configuration to {target_path}[/bold green]")
+
+
+@app.command()
+def benchmark(
+    model_name: str = typer.Argument(..., help="Name of running model to benchmark"),
+    requests: int = typer.Option(10, "--requests", "-r", help="Total requests to fire"),
+    concurrency: int = typer.Option(2, "--concurrency", "-c", help="Concurrent workers"),
+    max_tokens: int = typer.Option(64, "--tokens", "-t", help="Max tokens per response"),
+) -> None:
+    """Benchmark latency, TTFT, and generation throughput of an active model."""
+    ws = get_workspace()
+    catalog = discover_models(ws / "configs" / "models")
+    if model_name not in catalog:
+        console.print(f"[bold red]Model '{model_name}' not found in configs/models/[/bold red]")
+        raise typer.Exit(1)
+
+    cfg = catalog[model_name]
+    console.print(
+        f"Running benchmark on [bold cyan]{cfg.name}[/bold cyan] (Port: {cfg.port}) with {requests} requests (concurrency={concurrency})..."
+    )
+
+    result = asyncio.run(
+        run_model_benchmark(
+            host=cfg.host,
+            port=cfg.port,
+            model_alias=cfg.public_alias,
+            num_requests=requests,
+            concurrency=concurrency,
+            max_tokens=max_tokens,
+        )
+    )
+
+    table = Table(title=f"Benchmark Results: {cfg.name}", border_style="magenta")
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="bold")
+
+    table.add_row("Requests Completed", f"{result.successful_requests}/{result.num_requests}")
+    table.add_row("Failed Requests", str(result.failed_requests))
+    table.add_row("Total Generated Tokens", str(result.total_tokens_generated))
+    table.add_row("Elapsed Time", f"{result.elapsed_time_sec:.2f}s")
+    table.add_row("Generation Throughput", f"{result.tokens_per_second:.1f} tok/s")
+    table.add_section()
+    table.add_row("Average TTFT", f"{result.avg_ttft_ms:.1f} ms")
+    table.add_row("p95 TTFT", f"{result.p95_ttft_ms:.1f} ms")
+    table.add_row("Min TTFT", f"{result.min_ttft_ms:.1f} ms")
+    table.add_row("Max TTFT", f"{result.max_ttft_ms:.1f} ms")
+
+    console.print(table)
+
+
 # Subcommands for model
 @model_app.command("list")
 def model_list() -> None:
@@ -457,6 +576,57 @@ def model_list() -> None:
             cfg.dtype,
         )
     console.print(table)
+
+
+@model_app.command("create")
+def model_create(
+    name: Optional[str] = typer.Option(None, "--name", "-n", help="Model slug name"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Hugging Face repo or local path"),
+    engine: str = typer.Option("vllm", "--engine", "-e", help="Inference engine: vllm or sglang"),
+    port: int = typer.Option(8001, "--port", "-p", help="Port number"),
+    gpus: str = typer.Option("0", "--gpus", "-g", help="GPU indices, e.g. '0' or '0,1'"),
+    tp: int = typer.Option(1, "--tp", help="Tensor parallel size"),
+    context: int = typer.Option(8192, "--context", "-c", help="Max sequence length"),
+    quant: Optional[str] = typer.Option(None, "--quant", "-q", help="Quantization format"),
+    interactive: bool = typer.Option(False, "--interactive", "-i", help="Run interactive guided setup"),
+) -> None:
+    """Create a new model configuration YAML file."""
+    ws = get_workspace()
+    models_dir = ws / "configs" / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+
+    if interactive or not name or not model:
+        console.print("[bold cyan]Guided Model Setup Wizard[/bold cyan]\n")
+        if not name:
+            name = typer.prompt("Model name slug (e.g. mistral-7b)")
+        if not model:
+            model = typer.prompt("Hugging Face model ID or path (e.g. mistralai/Mistral-7B-Instruct-v0.3)")
+        engine_choice = typer.prompt("Engine (vllm or sglang)", default=engine)
+        engine = engine_choice
+        port = int(typer.prompt("Port", default=str(port)))
+        gpus = typer.prompt("GPU indices (e.g. 0 or 0,1)", default=gpus)
+
+    assert name is not None
+    assert model is not None
+
+    eng_enum = EngineType.VLLM if engine.lower() == "vllm" else EngineType.SGLANG
+    gpu_list = [int(x.strip()) for x in gpus.split(",") if x.strip().isdigit()] or [0]
+
+    cfg = ModelConfig(
+        name=name,
+        model=model,
+        engine=eng_enum,
+        served_model_name=name,
+        port=port,
+        gpus=gpu_list,
+        tensor_parallel_size=tp,
+        max_model_len=context,
+        quantization=quant,
+    )
+
+    target_path = models_dir / f"{cfg.name}.yaml"
+    save_model_config(cfg, target_path)
+    console.print(f"[bold green][OK] Model configuration saved to {target_path}[/bold green]")
 
 
 if __name__ == "__main__":
