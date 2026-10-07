@@ -26,7 +26,7 @@ class ModelWorkloadMetrics:
     def avg_latency_ms(self) -> float:
         if not self.recent_latencies:
             return 0.0
-        return (sum(self.recent_latencies) / len(self.recent_latencies)) * 1000.0
+        return round((sum(self.recent_latencies) / len(self.recent_latencies)) * 1000.0, 2)
 
 
 @dataclass

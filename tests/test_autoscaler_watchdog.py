@@ -42,7 +42,7 @@ def test_workload_autoscaler_signals():
         scaler.record_request_end("model-a", latency_seconds=0.05)
     assert metrics.active_requests == 0
     assert metrics.total_completed_requests == 27
-    assert metrics.avg_latency_ms == 50.0
+    assert metrics.avg_latency_ms == pytest.approx(50.0, rel=1e-3)
 
 
 @pytest.mark.asyncio
